@@ -35,58 +35,58 @@ typedef struct {
 } isa_data_t;
 
 /* CPU related instructions */
-void nop(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* No Operation */
-void stop(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* low power standby mode ? */
-void halt(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Halt operations until interrupt occurs */
-void ccf(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Set carry as carry XOR 1 */
-void scf(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Set carry flag to 1 */
-void di(gb_cpu_t *gb_cpu, isa_data_t *isa_data);                /* Disable Interrupts */
-void ei(gb_cpu_t *gb_cpu, isa_data_t *isa_data);                /* Enable Interrupts */
+void nop(gb_cpu_t *gb_cpu);               /* No Operation */
+void stop(gb_cpu_t *gb_cpu);              /* low power standby mode ? */
+void halt(gb_cpu_t *gb_cpu);              /* Halt operations until interrupt occurs */
+void ccf(gb_cpu_t *gb_cpu);               /* Set carry as carry XOR 1 */
+void scf(gb_cpu_t *gb_cpu);               /* Set carry flag to 1 */
+void di(gb_cpu_t *gb_cpu);                /* Disable Interrupts */
+void ei(gb_cpu_t *gb_cpu);                /* Enable Interrupts */
 /* Load/Store instructions */
-void ld(gb_cpu_t *gb_cpu, isa_data_t *isa_data);                /* Load operation */
-void ldh(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Load Halfword */
+void ld(gb_cpu_t *gb_cpu);                /* Load operation */
+void ldh(gb_cpu_t *gb_cpu);               /* Load Halfword */
 
 /* Increment/Decrement instructions */
-void inc(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Increment operation */
-void dec(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Decrement operation */
+void inc(gb_cpu_t *gb_cpu);               /* Increment operation */
+void dec(gb_cpu_t *gb_cpu);               /* Decrement operation */
 
 /* Arithmetic operations */
-void add(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Add operation */
-void adc(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Add with carry operation */
-void sub(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Subtraction operation */
-void sbc(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Subtract with carry operation */
-void daa(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Decimal adjust A ? */
-void _and(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Bitwise AND operation */
-void _or(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Bitwise OR operation */
-void _xor(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Bitwise XOR operation */
-void cp(gb_cpu_t *gb_cpu, isa_data_t *isa_data);                /* Compare operation */
-void cpl(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* A = A xor FF ? */
+void add(gb_cpu_t *gb_cpu);               /* Add operation */
+void adc(gb_cpu_t *gb_cpu);               /* Add with carry operation */
+void sub(gb_cpu_t *gb_cpu);               /* Subtraction operation */
+void sbc(gb_cpu_t *gb_cpu);               /* Subtract with carry operation */
+void daa(gb_cpu_t *gb_cpu);               /* Decimal adjust A ? */
+void _and(gb_cpu_t *gb_cpu);              /* Bitwise AND operation */
+void _or(gb_cpu_t *gb_cpu);               /* Bitwise OR operation */
+void _xor(gb_cpu_t *gb_cpu);              /* Bitwise XOR operation */
+void cp(gb_cpu_t *gb_cpu);                /* Compare operation */
+void cpl(gb_cpu_t *gb_cpu);               /* A = A xor FF ? */
 
 /* Rotate Instructions */
-void rlca(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Rotate left A */
-void rrca(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Rotate right A */
-void rla(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Rotate A left through carry */
-void rra(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Rotate A right through carry */
+void rlca(gb_cpu_t *gb_cpu);              /* Rotate left A */
+void rrca(gb_cpu_t *gb_cpu);              /* Rotate right A */
+void rla(gb_cpu_t *gb_cpu);               /* Rotate A left through carry */
+void rra(gb_cpu_t *gb_cpu);               /* Rotate A right through carry */
 
 /* Stack Instructions */
-void push(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Push register data to stack */
-void pop(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Pop to register */
+void push(gb_cpu_t *gb_cpu);              /* Push register data to stack */
+void pop(gb_cpu_t *gb_cpu);               /* Pop to register */
 
 /* Jump/Call Instructions */
-void jr(gb_cpu_t *gb_cpu, isa_data_t *isa_data);                /* Relative jump */
-void jp(gb_cpu_t *gb_cpu, isa_data_t *isa_data);                /* Jump to */
-void call(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Call procedure */
-void ret(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Return from procedure */
-void reti(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Return and enable interrupts */
+void jr(gb_cpu_t *gb_cpu);                /* Relative jump */
+void jp(gb_cpu_t *gb_cpu);                /* Jump to */
+void call(gb_cpu_t *gb_cpu);              /* Call procedure */
+void ret(gb_cpu_t *gb_cpu);               /* Return from procedure */
+void reti(gb_cpu_t *gb_cpu);              /* Return and enable interrupts */
 
 /* Jump vectors */
-void rst(gb_cpu_t *gb_cpu, isa_data_t *isa_data);               /* Jump vector call */
+void rst(gb_cpu_t *gb_cpu);               /* Jump vector call */
 
 /* Prefix CB Instructions */
-void pfcb(gb_cpu_t *gb_cpu, isa_data_t *isa_data);              /* Prefix CB instructions ? */
+void pfcb(gb_cpu_t *gb_cpu);              /* Prefix CB instructions ? */
 
 /* Instruction table indexed by opcode */
-void (*isa[])(gb_cpu_t *, isa_data_t *) = 
+static void (*isa[])(gb_cpu_t *) =
 //          0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
 {
 /* 0 */  nop,   ld,   ld,  inc,  inc,  dec,   ld, rlca,   ld,  add,   ld,  dec,  inc,  dec,   ld, rrca,

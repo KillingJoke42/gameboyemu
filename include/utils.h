@@ -11,6 +11,8 @@
 #define GBEMU_PRINT(x)
 #endif
 
+#define OFFSETOF(type, elem) (unsigned long)(&((type *)0)->elem)
+
 typedef struct {
     uint8_t *game;
     int sz;
