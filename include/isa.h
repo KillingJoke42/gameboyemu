@@ -103,8 +103,8 @@ static void (*isa[])(gb_cpu_t *) =
 /* B */  _or,  _or,  _or,  _or,  _or,  _or,  _or,  _or,   cp,   cp,   cp,   cp,   cp,   cp,   cp,   cp,
 /* C */  ret,  pop,   jp,   jp, call, push,  add,  rst,  ret,  ret,   jp, pfcb, call, call,  adc,  rst,
 /* D */  ret,  pop,   jp, NULL, call, push,  sub,  rst,  ret, reti,   jp, NULL, call, NULL,  sbc,  rst,
-/* E */  ldh,  pop,   ld, NULL, NULL, push, _and,  rst,  add,   jp,   ld, NULL, NULL, NULL, _xor,  rst,
-/* F */  ldh,  pop,   ld,   di, NULL, push,  _or,  rst,   ld,   ld,   ld,   ei, NULL, NULL,   cp,  rst
+/* E */  ld,  pop,   ld, NULL, NULL, push, _and,  rst,  add,   jp,   ld, NULL, NULL, NULL, _xor,  rst,
+/* F */  ld,  pop,   ld,   di, NULL, push,  _or,  rst,   ld,   ld,   ld,   ei, NULL, NULL,   cp,  rst
 };
 
 #endif

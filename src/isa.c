@@ -108,13 +108,385 @@ void ei(gb_cpu_t *gb_cpu)
 /* Load/Store instructions */
 void ld(gb_cpu_t *gb_cpu)
 {
+    /*
+        load instruction
+        This one is huge. When I say huge, I mean HUGE. There are 91 of them
+        For the most part, there aren't any outliers in the instructions here,
+        nothing too out of the ordinary. Since there are too many instructions
+        here, I won't be explaining the outliers here, but rather at the place
+        where I handled the case. Other than that the instruction is pretty
+        cookie cutter, take data from register/memory, and place it in register/
+        memory. I would like to state the types of ld instructions there are.
 
+            - ld rr, d16: load immediate 16bit data to a 16bit register.
+            - ld (rr), A: load accumulator data into memory located at address placed
+            in 16bit register.
+            - ld (rr+)/(rr-), A: Load accumulator data into memory located at address
+            placed in 16bit register and then increment/decrement the 16bit register
+            - ld r, d8: Load 8bit immediate value into 8bit register
+            - ld (rr), d8: Load 8bit immediate value into memory located at address
+            placed in 16bit register.
+            - ld A, (rr): load 8bit value from memory located at address placed in
+            16bit register into accumulator
+            - ld A, (rr+)/(rr-): Load 8bit value from memory located at address placed
+            in 16bit register into accumulator and increment/decrement the 16bit register
+            - ld r,r: Load 8bit value from 8bit register into 8bit register
+            - ld r, (rr): Load 8bit value from memory located at address placed in 16bit
+            register into 8bit register
+            - ld (rr), r: Load 8bit value from 8bit register into memory located at address
+            placed in 16bit register.
+            - ld (a8), A: Load 8bit value from accumulator into memory at address (FF00+a8)
+            - ld A, (a8): Load 8bit value from memory at address (FF00+a8) into accumulator
+            - ld (C), A: Load 8bit value from accumulator into memory at address (FF00+C)
+            - Ld A, (C): Load 8bit value from memory at address (FF00+C) into accumulator
+            - ld HL, SP+r8: Load SP + r8 (r8 is a signed 8bit number) into HL.
+            - ld SP, HL: Load 16bit value from HL into SP.
+            - ld (a16), A: Load 8bit value from accumulator into memory located at 16bit
+            immediate address.
+            - ld A, (a16): Load 8bit value from memory located at 16bit immediate address
+            into accumulator.
+
+        YEAH. That many. Get ready for some sleepless nights if you tryna code yourself.
+    */
+    uint8_t opcode, data8, offset;
+    uint8_t *reg8ptr, *reg16high_ptr, *reg16low_ptr;
+    uint16_t data16;
+
+    // Fetch opcode from memory
+    opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+
+    // Case ld SP, HL
+    if (opcode == 0xF9)
+    {
+        gb_cpu->gb_reg.SP = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+        return;
+    }
+
+    /*
+        Case HL, SP+r8.
+        There are a few things to talk about this instruction.
+        Remember that r8 here is a "signed" number. Which means that it is a 2's complement
+        version of a number, and it can be either positive or negative. And it is 8bit, so
+        it can hold values between -128 to 127. This allows us to load values from below and
+        above the stack. Remember that this works only because if we have the 2's complement
+        version of the number, then addition yeilds results based on the sign of the number
+        in question. For instance, take 28 - 2 (or 28 + (-2) ??). Simple enough, should give
+        us 26. But how does that work in binary?
+
+                28:         0 0 0 1  1 1 0 0
+                -2:         1 1 1 1  1 1 1 0
+               ------------------------------
+                26:    1    0 0 0 1  1 0 1 0
+        
+        Ignoring the carry that is generated, we can clearly see 2's complement gives us
+        exactly what we want from this operation. Same happens here with SP+r8, but only
+        difference is that we work with 16bit there. So what is the difference?
+
+        Well, remember that we are adding an 8bit data value to a 16bit data value. And the
+        signed number representation will be an 8bit, not a 16bit representation of the number.
+        Viusalize like this if you do not understand:
+
+                28: 0 0 0 0  0 0 0 0  0 0 0 1  1 1 0 0
+                -2: 0 0 0 0  0 0 0 0  1 1 1 1  1 1 1 0 - This is not 2's complement of -2 in 16bit
+               ----------------------------------------
+
+        What you want is something more like this:
+                28: 0 0 0 0  0 0 0 0  0 0 0 1  1 1 0 0
+                -2: 1 1 1 1  1 1 1 1  1 1 1 1  1 1 1 0 - This is 2's complement of -2 in 16bit
+               ----------------------------------------
+
+        We can make this happen by something called "sign extension". It's simple, really. Just
+        copy the MSB "sign bit" across the bits that we have to fill.
+    */
+    if (opcode == 0xF8)
+    {
+        data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        data16 = gb_cpu->gb_reg.SP + (uint16_t)((data8 & 0x80) ? (0xFF00 | data8) : (0x0000 | data8));
+
+        gb_cpu->gb_reg.HL.H = (uint8_t)((data16 & 0xFF00) >> 8);
+        gb_cpu->gb_reg.HL.L = (uint8_t)(data16 & 0x00FF);
+
+        clear_zero(gb_cpu);
+        clear_addsub(gb_cpu);
+        (((gb_cpu->gb_reg.SP & 0x0F)+(data8 & 0x0F)) & 0x10) ? \
+        set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
+        (((gb_cpu->gb_reg.SP & 0xFF)+(data8 & 0xFF)) & 0x100) ? \
+        set_carry(gb_cpu) : clear_carry(gb_cpu);
+        return;
+    }
+
+    /*
+        This takes care of three sets of instructions quite similar to each other
+        - LDH (a8), A   - LD (C), A    - LD (a16), A
+        - LDH A, (a8)   - LD A, (C)    - LD A, (a16)
+        First two sets use operands (The operands marked as "(a8)") as addresses
+        with (0xFF00 + 8bitdata). This is for I/O operation. The I/O devices such
+        as the gameboy control buttons are mapped as memory locations starting from
+        0xFF00. So, if we need to access the state of the buttons, we simply read
+        address (0xFF00 + (offset of input)). That offset is the 8bit operand for the
+        first two instruction sets. One is immediate data, one is from C register.
+
+        The third set of instructions is direct access: We provide the 16bit address
+        as one of the operands directly.
+
+        So to understand the logic of below code is simple:
+            Step 1) Check if the opcode is for 16bit direct addressing mode. If yes,
+            fetch the address from memory as next two bits after opcode. If no, we have
+            to decide between C and memory location one byte after opcode.
+                Step 1a) If opcode is for memory location one byte after opcode, fetch
+                that. Else fetch data within C register. In both cases add fetched result
+                to 0xFF00.
+            Step 2) Check whether we have to write to resolved address or we have to read
+            from resolved address and write to accumulator. Perform operation accordingly.
+    */
+    if ((opcode & 0xF0) >= 0xE0)
+    {
+        ((opcode & 0x0F) == 0x0A) ?
+        (data16 = (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++]) | \
+                  (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++] << 8)) :
+        (data16 = 0xFF00 + (uint16_t)(((opcode & 0x0F) == 0x00) ? (gb_cpu->gb_mem[gb_cpu->gb_reg.PC++]) : \
+                                                                  (gb_cpu->gb_reg.BC.C)));
+        ((opcode & 0xF0) == 0xE0) ? (mem_write(gb_cpu, data16, gb_cpu->gb_reg.AF.A)) : \
+                                    (gb_cpu->gb_reg.AF.A = mem_read(gb_cpu, data16));
+        return;
+    }
+
+    /*
+        Case ld rr, d16.
+        This is relatively simple. Nothing major. Fetch the data we need to load into 16bit
+        register from memory, two bytes after the opcode. We also have to resolve which 16bit
+        register we have to load into. That logic we have looked at before so we may re-use
+        that to our advantage. More explanation within code comments.
+    */
+    if (((opcode & 0x0F) == 0x01) && ((opcode & 0xF0) <= 0x30))
+    {
+        // Fetch 16bit immediate value from memory.
+        data16 = (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++]) | \
+            (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++] << 8);
+
+        // Hardcoding case where SP is used as the register to load into
+        if (opcode == 0x31)
+        {
+            gb_cpu->gb_reg.SP = data16;
+            return;
+        }
+        // For all register sets other than SP
+        else
+        {
+            // Calculate which 16bit register to use.
+            offset = 2*(((opcode & 0xF0) >> 4) + 1);
+            // Resolve higher and lower byte pointer to selected 16bit register
+            reg16high_ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
+            reg16low_ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset+1);
+
+            // Load the 16bit value into the 16bit register
+            *reg16high_ptr = (uint8_t)((data16 & 0xFF00) >> 8);
+            *reg16low_ptr = (uint8_t)(data16 & 0x00FF);
+            return;
+        }
+    }
+
+    /*
+        This takes care of two case sets:
+            - ld (rr), A; ld (rr+/-), A
+            - ld A, (rr); ld A, (rr+/-)
+
+        Instead of thinking up something mathematical, I just took the L and switch cased it
+        Apologize for this. It was 3 in the morning and I did not have the energy. You can, of
+        course, use the 8bit register resolution logic we used previously to resolve this as
+        well. It really is the same.
+        There is one difference tho. Notice how for (HL) we have (HL+)/(HL-). This simply
+        means that after getting the data from address stored in HL and loading that in A,
+        we have to increment/decrement HL. No getting overwhelmed from this. Let's just code
+        the case separately, now that we have placed switch cases. So after we put the 16bit
+        data from HL into a temporary variable, simply increment/decrement HL. No worry.
+
+        After resolving the address to use for memory fetch, based on the opcode we decide
+        whether we load into the address or load from the address into accumulator. I'll
+        mark the HL+/HL- case separately.
+    */
+    if ((((opcode & 0x0F) == 0x02) | ((opcode & 0x0F) == 0x0A)) && ((opcode & 0xF0) <= 0x30))
+    {
+        switch (opcode)
+        {
+            case 0x0A:
+            case 0x02:
+                data16 = (uint16_t)(gb_cpu->gb_reg.BC.B << 8) | (uint16_t)(gb_cpu->gb_reg.BC.C);
+                break;
+            
+            case 0x1A:
+            case 0x12:
+                data16 = (uint16_t)(gb_cpu->gb_reg.DE.D << 8) | (uint16_t)(gb_cpu->gb_reg.DE.E);
+                break;
+
+            // (HL+)
+            case 0x2A:
+            case 0x22:
+                data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+                gb_cpu->gb_reg.HL.H = (uint16_t)(((data16 + 1) & 0xFF00) >> 8);
+                gb_cpu->gb_reg.HL.L = (uint16_t)((data16 + 1) & 0x00FF);
+                break;
+
+            // (HL-)
+            case 0x3A:
+            case 0x32:
+                data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+                gb_cpu->gb_reg.HL.H = (uint16_t)(((data16 - 1) & 0xFF00) >> 8);
+                gb_cpu->gb_reg.HL.L = (uint16_t)((data16 - 1) & 0x00FF);
+                break;
+        }
+
+        ((opcode & 0x0F) == 0x02) ? \
+            (mem_write(gb_cpu, data16, gb_cpu->gb_reg.AF.A)) : \
+            (gb_cpu->gb_reg.AF.A = mem_read(gb_cpu, data16));
+        return;
+    }
+
+    /*
+        Case ld r, d8.
+        Nothing of note here. I'll mark the steps but it's just the same as what we have done uptil
+        now.
+    */
+    if ((((opcode & 0x0F) == 0x06) | ((opcode & 0x0F) == 0x0E)) && ((opcode & 0xF0) <= 0x30))
+    {
+        // All cases fetch 8bit immediate data from memory
+        data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        
+        /*
+            Hardcoding two cases:
+                - One where we load into memory at address stored in HL
+                - One where we load into A
+        */
+        if (opcode == 0x36)
+        {
+            data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+            mem_write(gb_cpu, data16, data8);
+            return;
+        }
+        if (opcode == 0x3E)
+        {
+            gb_cpu->gb_reg.AF.A = data8;
+            return;
+        }
+
+        /*
+            Same logic as before to resolve which 8bit register to select
+            And then get a reference to register. Use the reference to load resolved 8bit
+            data obtained before into it.
+        */
+        offset = 2*(((opcode & 0xF0) >> 4) + 1);
+        reg8ptr = (uint8_t *)((unsigned long)(&(gb_cpu->gb_reg))+offset+ \
+                             (((opcode & 0x0F) == 0x0E) ? 1 : 0));
+        
+        *reg8ptr = data8;
+        return;
+    }
+
+    /*
+        Here it comes.
+        The hail mary.
+        This is the GIANT BLOCK of ld instructions right in the middle of the opcode table.
+        (16x4 - 1) ld instructions. A giant **** you. But we cracking this. We ain't gonna
+        back down.
+
+        We shall first resolve the 0x7x row. This is because it uses (HL) as location to
+        load data into. Since I was dumb enough not to fix the order of the register structure
+        definitions correctly, we now have to accomodate for that everytime.
+    */
+    if ((opcode & 0xF0) == 0x70)
+    {
+        // opcodes on and before 0x07 use (HL)
+        if ((opcode & 0x0F) <= 0x07)
+        {
+            data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+            /*
+                This might be a new method of selecting an 8bit register. Just gonna highlight
+                how this works real quick.
+                7       0   1   2   3   4   5   6
+                A   F   B   C   D   E   H   L   x
+                Above is how opcodes map to 8bit registers.
+
+                Now if we want to get to A, we need offset to be 0. But from opcode we are
+                getting 7. To get to B, we need offset to be 2, but from opcode we are getting
+                0. So, taking these two pieces of information, we can formulate a plan.
+                To get to B safely, we need to add 2 to the opcode. But, we also need to loopback
+                to zero for A, while preserving offset for B. In comes modulo operator. We simply
+                modulo by (7+2), so that when opcode is 7, (7+2) % 9 will land us to 0 safely.
+            */
+            offset = ((opcode & 0x0F) + 2) % 9;
+            data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+
+            // Write to calculated address with data received from calculated register.
+            mem_write(gb_cpu, data16, data8);
+            return;
+        }
+        // Now do the same as above, only accumulator is used as the register to load data into.
+        else
+        {
+            if (opcode == 0x7E)
+            {
+                data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+                data8 = mem_read(gb_cpu, data16);
+            }
+            else
+            {
+                offset = ((opcode & 0x0F) + 2) % 9;
+                data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+            }
+            gb_cpu->gb_reg.AF.A = data8;
+            return;
+        }
+    }
+
+    /*
+        Now that the outliers are out of the way, code the modular chunk of the ld opcode
+        chunk. There is a simple pattern to them along rows/columns. Two patterns acutally.
+
+        B, B    B, C    B, D    B, E    B, H    B, L    B, (HL)    B, A    C, B ....
+        D, B                                                               E, B ....
+        H, B                                                               L, B ....
+        (HL), B                                                            A, B ....
+
+        We can do the pattern easily. B, C, D, E, H, L, (HL) A along a row until 0x07 and
+        repeat the pattern following that. Along the column we do, B D H (HL) before 0x07
+        and C E L A after that.
+        For the row pattern we simply re-use the 8bit register resolution we used above.
+        For the column pattern we re-use the 8bit register resolution we used before, and
+        add 1 to the offset for opcodes after 0x07 to get the C E L A pattern. After all
+        this autism we shall be able to take care of most cases except two small things:
+            - We will have to hardcode 0x06 and 0x0E rows as they use (HL). Same old issue
+            - Talking about the column pattern, to repeat B C D E H L (HL) A after 0x07 we
+            will have to account for the fact that 0x08 has to loopback to 0x00. And then
+            we can re-use our logic for B C D E H L (HL) A. Again, loopback word indicates
+            the use of modulo.
+    */
+
+    // Fetch register to load data into
+    offset = 2*(((opcode & 0xF0) >> 4) + 1);
+    reg8ptr = (uint8_t *)((unsigned long)(&(gb_cpu->gb_reg))+offset+ \
+                             (((opcode & 0x0F) <= 0x07) ? 0 : 1));
+    offset = ((opcode & 0x0F) + 2) % 9;
+
+    // Fetch data that has to be loaded into register
+    if ((opcode & 0x0F) == 0x06 || (opcode & 0x0F) == 0x0E)
+    {
+        data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+        data8 = mem_read(gb_cpu, data16);
+    }
+    else
+    {
+        offset = (((opcode & 0x0F) % 8) + 2) % 9;
+        data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+    }
+    
+    *reg8ptr = data8;
+    return;
 }
 
-void ldh(gb_cpu_t *gb_cpu)
-{
+// void ldh(gb_cpu_t *gb_cpu)
+// {
 
-}
+// }
 
 /* Increment/Decrement instructions */
 void inc(gb_cpu_t *gb_cpu)
@@ -356,16 +728,25 @@ void add(gb_cpu_t *gb_cpu)
     uint8_t opcode, data8, offset, orgAval;
     uint16_t data16, primary16, result16;
 
+    // Fetch opcode from memory
     opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
 
+    // Hardcoding opcode ADD SP, r8
     if (opcode == 0xE8)
     {
+        // Fetching operan values
         primary16 = gb_cpu->gb_reg.SP;
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
 
+        // Performing add and storing result in SP
         result16 = primary16 + (uint16_t)data8;
         gb_cpu->gb_reg.SP = result16;
 
+        /*
+            Update flags. ADD SP, r8 follows 0 0 H C rule.
+            Remember, here H is triggered from bit 3 and C is triggered from
+            bit 7
+        */
         clear_zero(gb_cpu);
         clear_addsub(gb_cpu);
         // A+B > 0xFF
@@ -376,26 +757,45 @@ void add(gb_cpu_t *gb_cpu)
         return;
     }
 
+    // Case ADD A, r. 8 bit addition.
     if (opcode == 0xC6 || (opcode & 0xF0) == 0x80)
     {
+        // Hardcoding opcode case where 8 bit operand is fetched from memory
         if (opcode == 0xC6)
             data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        /* 
+            Hardcoding opcode case where 8 bit operand is fetched from memory indexed
+            by address stored in HL
+        */
         else if (opcode == 0x86)
         {
             data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
             data8 = mem_read(gb_cpu, data16);
         }
+        // Hardcoding case where other operand is A itself
         else if (opcode == 0xC6)
             data8 = gb_cpu->gb_reg.AF.A;
+        // With all the special cases asside, we may now work with the generic case
         else
         {
+            /*
+                We have worked out how this offset is calculated multiple times now. Skipping
+                explanation. To keep it simple, we skip the AF register and land on B. From there,
+                value of opcode's MSB controls which register we land on.
+            */
             offset = 2+((opcode & 0xF0) >> 4);
             data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
         }
 
+        // Saving value of A before addition for flag calculation purposes
         orgAval = gb_cpu->gb_reg.AF.A;
+        // Performing 8bit add and saving data in accumulator
         gb_cpu->gb_reg.AF.A += data8;
 
+        /*
+            ADD A, r follows Z 0 H C rule. Bear in mind here the carry is generated at bit 7
+            and halfcarry is generated at bit 3.
+        */
         (gb_cpu->gb_reg.AF.A == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
         clear_addsub(gb_cpu);
         (((orgAval & 0x0F)+(data8 & 0x0F)) & 0x10) ?
@@ -405,21 +805,37 @@ void add(gb_cpu_t *gb_cpu)
         return;
     }
 
+    /*
+        Now we take care of the ADD HL, rr case. This is a 16 bit addition instruction.
+        Fetching operand 1, which is data present in HL
+    */
     primary16 =
         (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
 
+    // Hardcoding case where opcode uses SP as operand 2
     if (opcode == 0x39)
         data16 = gb_cpu->gb_reg.SP;
+    /*
+        Coding generic case. Again same offset logic is incorporated. Skip AF, we land
+        on B. From there, to access each 16 bit register, we multiply obtained offset
+        by 2.
+    */
     else
     {
         offset = 2*(((opcode & 0xF0) >> 4)+1);
         data16 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
     }
 
+    // Perform the 16bit add and store result in HL
     result16 = primary16+data16;
     gb_cpu->gb_reg.HL.H = (uint8_t)((result16 & 0xFF00) >> 8);
     gb_cpu->gb_reg.HL.L = (uint8_t)(result16 & 0x00FF);
 
+    /*
+        Update flags. ADD HL, rr follows - 0 H C rule bit with a twist.
+        PLEASE take note, halfcarry is generated at bit 11 and carry is
+        generated at bit 15
+    */
     clear_addsub(gb_cpu);
     (((primary16 & 0x0FFF)+(data16 & 0x0FFF)) & 0x1000) ? \
         set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
@@ -450,7 +866,42 @@ void daa(gb_cpu_t *gb_cpu)
 
 void _and(gb_cpu_t *gb_cpu)
 {
+    /*
+        _and: Perform bitwise and with the accumulator
+        Nothing of note. Simple enough. Bitwise AND with the register A.
+    */
+    uint8_t opcode, data8, offset;
+    uint16_t data16;
 
+    // Fetch opcode from memory
+    opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+
+    // Hardcode case where 8bit data is fetched from memory
+    if (opcode == 0xE6)
+        data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+    // Hardcode case where 8bit data is fetched from memory located at address stored in HL
+    else if (opcode == 0xA6)
+    {
+        data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+        data8 = mem_read(gb_cpu, data16);
+    }
+    // Cases where general purpose registers are used to get 8bit data
+    else
+    {
+        // Checkout ld instruction's comments to see how this resolution works
+        offset = ((opcode & 0x0F) + 2) % 9;
+        data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg) + offset));
+    }
+
+    // Perform bitwise AND with accumulator
+    gb_cpu->gb_reg.AF.A &= data8;
+
+    // Flags for this instruction are Z 0 1 0
+    (gb_cpu->gb_reg.AF.A == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
+    clear_addsub(gb_cpu);
+    set_halfcarry(gb_cpu);
+    clear_carry(gb_cpu);
+    return;
 }
 
 void _or(gb_cpu_t *gb_cpu)
@@ -523,7 +974,42 @@ void _or(gb_cpu_t *gb_cpu)
 
 void _xor(gb_cpu_t *gb_cpu)
 {
+    /*
+        _xor: Perform bitwise xor over accumulator
+        Nothing of note. Just a bitwise operation.
+    */
+    uint8_t opcode, data8, offset;
+    uint16_t data16;
 
+    // Fetch opcode from memory
+    opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+
+    // Hardcode case where 8bit data is fetched from memory
+    if (opcode == 0xEE)
+        data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+    // Hardcode case where 8bit data is fetched from memory located at address stored in HL
+    else if (opcode == 0xAE)
+    {
+        data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
+        data8 = mem_read(gb_cpu, data16);
+    }
+    // Cases where general purpose registers are used to get 8bit data
+    else
+    {
+        // Checkout ld instruction's comments to see how this resolution works
+        offset = (((opcode & 0x0F) - 8) + 2) % 9;
+        data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg) + offset));
+    }
+
+    // Perform bitwise AND with accumulator
+    gb_cpu->gb_reg.AF.A ^= data8;
+
+    // Flags for this instruction are Z 0 0 0
+    (gb_cpu->gb_reg.AF.A == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
+    clear_addsub(gb_cpu);
+    clear_halfcarry(gb_cpu);
+    clear_carry(gb_cpu);
+    return;
 }
 
 void cp(gb_cpu_t *gb_cpu)
@@ -539,22 +1025,126 @@ void cpl(gb_cpu_t *gb_cpu)
 /* Rotate Instructions */
 void rlca(gb_cpu_t *gb_cpu)
 {
+    /*
+        Rotate left affect carry.
+        This a rotate instruction that acts on the accumulator. The old bit7 is copied to
+        both carry and the new bit0 of the accumulator. To understand this here is a chart
+                        -----
+           |----------->|   |   Carry Flag
+           |            -----
+           |--------------------------------|
+        ---------------------------------   |
+        | <-| <-| <-| <-| <-| <-| <-| <-|<--|
+        ---------------------------------
+          7   6   5   4   3   2   1   0
+    */
+    uint8_t bit7;
 
+    // Save the old 7th bit temporarily
+    bit7 = (gb_cpu->gb_reg.AF.A & 0x80) >> 7;
+    /*
+        We perform a left shift by one, and insert the old 7th bit at the end of the result
+        This makes the operation into a "rotate" from a "shift".
+    */
+    gb_cpu->gb_reg.AF.A = (gb_cpu->gb_reg.AF.A << 1);
+    gb_cpu->gb_reg.AF.A |= bit7;
+
+    // If the old 7th bit is 1, set the carry. Else reset
+    bit7 ? set_carry(gb_cpu) : clear_carry(gb_cpu);
+    clear_zero(gb_cpu);
+    clear_addsub(gb_cpu);
+    clear_halfcarry(gb_cpu);
+    return;
 }
 
 void rrca(gb_cpu_t *gb_cpu)
 {
+    /*
+        Rotate right affect carry.
+        Same op as rlca, just rotate to the right.
+        Look at rlca for more info.
+    */
+    uint8_t bit0;
 
+    // Save the old 0th bit temporarily
+    bit0 = gb_cpu->gb_reg.AF.A & 0x01;
+    /*
+        We perform a left shift by one, and insert the old 0th bit at the end of the result
+        This makes the operation into a "rotate" from a "shift".
+    */
+    gb_cpu->gb_reg.AF.A = (gb_cpu->gb_reg.AF.A >> 1);
+    gb_cpu->gb_reg.AF.A |= (bit0 << 7);
+
+    // If the old 7th bit is 1, set the carry. Else reset
+    bit0 ? set_carry(gb_cpu) : clear_carry(gb_cpu);
+    clear_zero(gb_cpu);
+    clear_addsub(gb_cpu);
+    clear_halfcarry(gb_cpu);
+    return;
 }
 
 void rla(gb_cpu_t *gb_cpu)
 {
+    /*
+        Rotate A left through carry.
+        This is a rotate operation with the carry also involved. Not just for bit copy, but
+        as a bit considered in the rotation as well. If that confuses you, here is a diagram
 
+          |-----------------------------------------|
+          |                                         |
+        -----   ---------------------------------   |
+        | C | <-| <-| <-| <-| <-| <-| <-| <-| <-| <-|
+        -----   ---------------------------------
+                    7   6   5   4   3   2   1   0
+
+        It is simple really. Shift everything to the left, and bit7 is shifted to the carry.
+        What was present in the carry is shifted to bit0.
+    */
+    uint8_t bit7;
+
+    // Save the 0th bit temporarily
+    bit7 = (gb_cpu->gb_reg.AF.A & 0x80) >> 7;
+    
+    /*
+        Shift everything to the left, and place the old value of carry into the 0th bit.
+        That way carry bit becomes part of the rotate.
+    */
+    gb_cpu->gb_reg.AF.A = (gb_cpu->gb_reg.AF.A << 1);
+    gb_cpu->gb_reg.AF.A |= ((gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) >> FLAG_CARRY);
+
+    // Shift bit7 to the carry bit.
+    bit7 ? set_carry(gb_cpu) : clear_carry(gb_cpu);
+    clear_zero(gb_cpu);
+    clear_addsub(gb_cpu);
+    clear_halfcarry(gb_cpu);
+    return;
 }
 
 void rra(gb_cpu_t *gb_cpu)
 {
+    /*
+        Rotate right through carry.
+        Same as rla, just rotate to the right.
+        See rla for more info.
+    */
+    uint8_t bit0;
 
+    // Save the 0th bit temporarily
+    bit0 = gb_cpu->gb_reg.AF.A & 0x01;
+    
+    /*
+        Shift everything to the left, and place the old value of carry into the 0th bit.
+        That way carry bit becomes part of the rotate.
+    */
+    gb_cpu->gb_reg.AF.A = (gb_cpu->gb_reg.AF.A >> 1);
+    gb_cpu->gb_reg.AF.A |= ((gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) << (7 - FLAG_CARRY));
+
+    // Shift bit7 to the carry bit.
+    bit0 ? set_carry(gb_cpu) : clear_carry(gb_cpu);
+    clear_zero(gb_cpu);
+    clear_addsub(gb_cpu);
+    clear_halfcarry(gb_cpu);
+    return;
 }
 
 /* Stack Instructions */
@@ -676,7 +1266,69 @@ void pop(gb_cpu_t *gb_cpu)
 /* Jump/Call Instructions */
 void jr(gb_cpu_t *gb_cpu)
 {
+    /*
+        Jump with offset
+        Essentially this instruction adds an offset as the jump to the existing program
+        counter after opcode and offset fetch has been executed. It is having both
+        unconditional/conditional variants.
+        TAKE NOTE: If the condition passes, the offset is added after the PC fetches current
+        instruction's opcode and offset. Don't get confused like I did: imagine it this way:
+            - Step 1: Fetch instruction at current PC. PC++
+            - Step 2: Fetch jump offset. PC++. Now PC is pointing at the instruction next to
+            the jump instruction.
+            - Step 3: Check the condition based on what opcode is fired. If we unconditional,
+            add the offset to the PC and jump succeeded. If conditional, then add offset to
+            PC if condition passes.
+            Simple as that. No confusion. Here's a diagram to (un)confuse you more.
+        original PC     offset      PC here after opcode and offset fetch
+            |           |           |-------------------------------------|
+            20H         03H         88H         98H         4AH         ABH
+                                                |                       |
+                                    Land here if cond == false          land here if cond == true
+    */
+    uint8_t opcode, jmpoffset8, jmpyn = 1;
 
+    // Fetch opcode and offset from memory
+    opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+    jmpoffset8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+
+    /*
+        There are only 5 opcodes of JR. Thought I'd just hardcode them. Making logic and
+        all for 5 instructions felt like overkill
+    */
+    switch (opcode)
+    {
+        // Unconditional jump
+        case 0x18:
+            jmpyn = 1;
+            break;
+
+        // Jump if not zero
+        case 0x20:
+            (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO)) ? (jmpyn = 0) : (jmpyn = 1);
+            break;
+
+        // Jump if not carry
+        case 0x30:
+            (gb_cpu->gb_reg.AF.A & (1 << FLAG_CARRY)) ? (jmpyn = 0) : (jmpyn = 1);
+            break;
+
+        // Jump if zero
+        case 0x28:
+            (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO)) ? (jmpyn = 1) : (jmpyn = 0);
+            break;
+
+        // Jump if carry
+        case 0x38:
+            (gb_cpu->gb_reg.AF.A & (1 << FLAG_CARRY)) ? (jmpyn = 1) : (jmpyn = 0);
+            break;
+    }
+
+    // In case the condition passed, or we have an unconditonal jump, then update PC
+    if (jmpyn)
+        gb_cpu->gb_reg.PC += jmpoffset8;
+
+    return;
 }
 
 void jp(gb_cpu_t *gb_cpu)
