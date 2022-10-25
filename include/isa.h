@@ -103,8 +103,42 @@ static void (*isa[])(gb_cpu_t *) =
 /* B */  _or,  _or,  _or,  _or,  _or,  _or,  _or,  _or,   cp,   cp,   cp,   cp,   cp,   cp,   cp,   cp,
 /* C */  ret,  pop,   jp,   jp, call, push,  add,  rst,  ret,  ret,   jp, pfcb, call, call,  adc,  rst,
 /* D */  ret,  pop,   jp, NULL, call, push,  sub,  rst,  ret, reti,   jp, NULL, call, NULL,  sbc,  rst,
-/* E */  ld,  pop,   ld, NULL, NULL, push, _and,  rst,  add,   jp,   ld, NULL, NULL, NULL, _xor,  rst,
-/* F */  ld,  pop,   ld,   di, NULL, push,  _or,  rst,   ld,   ld,   ld,   ei, NULL, NULL,   cp,  rst
+/* E */   ld,  pop,   ld, NULL, NULL, push, _and,  rst,  add,   jp,   ld, NULL, NULL, NULL, _xor,  rst,
+/* F */   ld,  pop,   ld,   di, NULL, push,  _or,  rst,   ld,   ld,   ld,   ei, NULL, NULL,   cp,  rst
 };
 
+/* Prefix CB instructions */
+
+void  rlc(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  rrc(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void   rl(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void   rr(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  sla(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  sra(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void swap(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  srl(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  bit(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  res(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+void  set(gb_cpu_t *gb_cpu, uint8_t cb_opcode);
+
+static void (*prefix_cb[])(gb_cpu_t *, uint8_t) = 
+//          0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+{
+/* 0 */  rlc,  rlc,  rlc,  rlc,  rlc,  rlc,  rlc,  rlc,  rrc,  rrc,  rrc,  rrc,  rrc,  rrc,  rrc,  rrc,
+/* 1 */   rl,   rl,   rl,   rl,   rl,   rl,   rl,   rl,   rr,   rr,   rr,   rr,   rr,   rr,   rr,   rr,
+/* 2 */  sla,  sla,  sla,  sla,  sla,  sla,  sla,  sla,  sra,  sra,  sra,  sra,  sra,  sra,  sra,  sra,
+/* 3 */ swap, swap, swap, swap, swap, swap, swap, swap,  srl,  srl,  srl,  srl,  srl,  srl,  srl,  srl,
+/* 4 */  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,
+/* 5 */  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,
+/* 6 */  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,
+/* 7 */  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,  bit,
+/* 8 */  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,
+/* 9 */  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,
+/* A */  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,
+/* B */  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,  res,
+/* C */  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,
+/* D */  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,
+/* E */  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,
+/* F */  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set
+};
 #endif
