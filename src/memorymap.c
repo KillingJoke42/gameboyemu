@@ -1,4 +1,5 @@
 #include <gbcpu.h>
+#include <utils.h>
 #include <memorymap.h>
 
 /* 
@@ -11,6 +12,10 @@
 */
 void mem_write(gb_cpu_t *gb_cpu, uint16_t addr, uint8_t val)
 {
+    if (addr == 0xFF0F)
+    {
+        GBEMU_PRINT(("Val written to 0xFF0F = %02X. Value before: %02X\n", val, mem_read(gb_cpu, addr)));
+    }
     gb_cpu->gb_mem[addr] = val;
     return;
 }

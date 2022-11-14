@@ -72,6 +72,9 @@ void reset_register_init(gb_cpu_t *gb_cpu)
 
     for (int i = 0; i < POWERUP_STACK_ADDR_CNT; i++)
         mem_write(gb_cpu, powerup_stack_addrs[i], powerup_stack_init[i]);
+
+    // Comment this later!!!!
+    mem_write(gb_cpu, 0xFF44, 0x90);
 }
 
 void load_gb_rom(gb_cpu_t *gb_cpu, game_file_t *game_file)
@@ -89,17 +92,22 @@ void load_gb_rom(gb_cpu_t *gb_cpu, game_file_t *game_file)
 void register_dump(gb_cpu_t *gb_cpu)
 {
     uint16_t af, bc, de, hl;
-
-    af = (uint16_t)(gb_cpu->gb_reg.AF.A << 8) | \
-         (uint16_t)(gb_cpu->gb_reg.AF.F);
-    bc = (uint16_t)(gb_cpu->gb_reg.BC.B << 8) | \
-         (uint16_t)(gb_cpu->gb_reg.BC.C);
-    de = (uint16_t)(gb_cpu->gb_reg.DE.D << 8) | \
-         (uint16_t)(gb_cpu->gb_reg.DE.E);
-    hl = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
-         (uint16_t)(gb_cpu->gb_reg.HL.L);
+    /*
+        af = (uint16_t)(gb_cpu->gb_reg.AF.A << 8) | \
+            (uint16_t)(gb_cpu->gb_reg.AF.F);
+        bc = (uint16_t)(gb_cpu->gb_reg.BC.B << 8) | \
+            (uint16_t)(gb_cpu->gb_reg.BC.C);
+        de = (uint16_t)(gb_cpu->gb_reg.DE.D << 8) | \
+            (uint16_t)(gb_cpu->gb_reg.DE.E);
+        hl = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
+            (uint16_t)(gb_cpu->gb_reg.HL.L);
+    */
     
-    GBEMU_PRINT(("AF: %x, BC: %x, DE: %x, HL: %x, SP: %x, PC: %x\n", af, bc, de, hl, \
-                 gb_cpu->gb_reg.SP, gb_cpu->gb_reg.PC));
+    GBEMU_PRINT(("A: %02X F: %02X B: %02X C: %02X D: %02X E: %02X H: %02X L: %02X SP: %04X PC: 00:%04X (%02X %02X %02X %02X)\n", 
+                    gb_cpu->gb_reg.AF.A, gb_cpu->gb_reg.AF.F, gb_cpu->gb_reg.BC.B, gb_cpu->gb_reg.BC.C,
+                    gb_cpu->gb_reg.DE.D, gb_cpu->gb_reg.DE.E, gb_cpu->gb_reg.HL.H, gb_cpu->gb_reg.HL.L,
+                    gb_cpu->gb_reg.SP, gb_cpu->gb_reg.PC,
+                    gb_cpu->gb_mem[gb_cpu->gb_reg.PC], gb_cpu->gb_mem[gb_cpu->gb_reg.PC+1],
+                    gb_cpu->gb_mem[gb_cpu->gb_reg.PC+2], gb_cpu->gb_mem[gb_cpu->gb_reg.PC+3]));
     return;
 }

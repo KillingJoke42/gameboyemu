@@ -141,4 +141,6 @@ static void (*prefix_cb[])(gb_cpu_t *, uint8_t) =
 /* E */  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,
 /* F */  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set,  set
 };
+
+void processInterrupts(gb_cpu_t *gb_cpu);
 #endif

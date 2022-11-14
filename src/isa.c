@@ -186,6 +186,17 @@ void ld(gb_cpu_t *gb_cpu)
         return;
     }
 
+
+    // Case ld (a16), SP
+    if (opcode == 0x08)
+    {
+        data16 = (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++]) | \
+                 (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++] << 8);
+        mem_write(gb_cpu, data16, (uint8_t)(gb_cpu->gb_reg.SP & 0x00FF));
+        mem_write(gb_cpu, data16+1, (uint8_t)((gb_cpu->gb_reg.SP & 0xFF00) >> 8));
+        return;
+    }
+
     /*
         Case HL, SP+r8.
         There are a few things to talk about this instruction.
@@ -270,6 +281,7 @@ void ld(gb_cpu_t *gb_cpu)
                   (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++] << 8)) :
         (data16 = 0xFF00 + (uint16_t)(((opcode & 0x0F) == 0x00) ? (gb_cpu->gb_mem[gb_cpu->gb_reg.PC++]) : \
                                                                   (gb_cpu->gb_reg.BC.C)));
+        // GBEMU_PRINT(("data16 is %04x\n", data16));
         ((opcode & 0xF0) == 0xE0) ? (mem_write(gb_cpu, data16, gb_cpu->gb_reg.AF.A)) : \
                                     (gb_cpu->gb_reg.AF.A = mem_read(gb_cpu, data16));
         return;
@@ -454,7 +466,7 @@ void ld(gb_cpu_t *gb_cpu)
             }
             else
             {
-                offset = ((opcode & 0x0F) + 2) % 9;
+                offset = (((opcode & 0x0F) - 0x08) + 2) % 9;
                 data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
             }
             gb_cpu->gb_reg.AF.A = data8;
@@ -486,7 +498,7 @@ void ld(gb_cpu_t *gb_cpu)
     */
 
     // Fetch register to load data into
-    offset = 2*(((opcode & 0xF0) >> 4) + 1);
+    offset = 2*((((opcode & 0xF0) >> 4) - 0x04) + 1);
     reg8ptr = (uint8_t *)((unsigned long)(&(gb_cpu->gb_reg))+offset+ \
                              (((opcode & 0x0F) <= 0x07) ? 0 : 1));
 
@@ -495,13 +507,14 @@ void ld(gb_cpu_t *gb_cpu)
     {
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        // GBEMU_PRINT(("data8: %02X, data16: %04X\n", data8, data16));
     }
     else
     {
         offset = (((opcode & 0x0F) % 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
     }
-    
+
     *reg8ptr = data8;
     return;
 }
@@ -674,7 +687,7 @@ void dec(gb_cpu_t *gb_cpu)
         {
             data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                         (uint16_t)(gb_cpu->gb_reg.HL.L);
-            data8 = mem_read(gb_cpu, data16) + 1;
+            data8 = mem_read(gb_cpu, data16) - 1;
             mem_write(gb_cpu, data16, data8);
             data = &data8;
             goto flag_update;
@@ -694,7 +707,7 @@ void dec(gb_cpu_t *gb_cpu)
 flag_update:
     (*data == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
     set_addsub(gb_cpu);
-    ((*data & 0x0F) == 0x0F) ? clear_halfcarry(gb_cpu) : set_halfcarry(gb_cpu);
+    ((*data & 0x0F) == 0x0F) ? set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
     return;
 }
 
@@ -757,7 +770,8 @@ void add(gb_cpu_t *gb_cpu)
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
 
         // Performing add and storing result in SP
-        result16 = primary16 + (uint16_t)data8;
+        result16 = primary16 + \
+            (uint16_t)((data8 & 0x80) ? (0xFF00 | data8) : (0x0000 | data8));
         gb_cpu->gb_reg.SP = result16;
 
         /*
@@ -791,7 +805,7 @@ void add(gb_cpu_t *gb_cpu)
             data8 = mem_read(gb_cpu, data16);
         }
         // Hardcoding case where other operand is A itself
-        else if (opcode == 0xC6)
+        else if (opcode == 0x87)
             data8 = gb_cpu->gb_reg.AF.A;
         // With all the special cases asside, we may now work with the generic case
         else
@@ -801,7 +815,7 @@ void add(gb_cpu_t *gb_cpu)
                 explanation. To keep it simple, we skip the AF register and land on B. From there,
                 value of opcode's MSB controls which register we land on.
             */
-            offset = 2+((opcode & 0xF0) >> 4);
+            offset = 2+(opcode & 0x0F);
             data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
         }
 
@@ -841,7 +855,8 @@ void add(gb_cpu_t *gb_cpu)
     else
     {
         offset = 2*(((opcode & 0xF0) >> 4)+1);
-        data16 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        data16 = (uint16_t)(*((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset)) << 8) | \
+                 (uint16_t)(*((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset+1)));
     }
 
     // Perform the 16bit add and store result in HL
@@ -927,7 +942,7 @@ void adc(gb_cpu_t *gb_cpu)
         Flag rule is Z 0 H C
         Already explained the carry rule, so not going over that again
     */
-    (result == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
+    ((uint8_t)result == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
     clear_addsub(gb_cpu);
     (((gb_cpu->gb_reg.AF.A & 0x0F)+(data8 & 0x0F)+carryval) & 0x10) ? \
         set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
@@ -1035,8 +1050,42 @@ void sbc(gb_cpu_t *gb_cpu)
     set_addsub(gb_cpu);
     (((gb_cpu->gb_reg.AF.A & 0x0F)-(data8 & 0x0F)-carryval) & 0x10) ? \
         set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
-    (gb_cpu->gb_reg.AF.A < (data8 - carryval)) ? \
-        set_carry(gb_cpu) : clear_carry(gb_cpu);
+    
+    /*
+        Calculate the carry-out depending on the carry-in and addends.
+        
+        Do a mental exercise with yourself.
+        When would we get a carry?
+
+        There are three players in this game, A, B, and carry
+
+        A > B
+        ------
+        carry = 0:  A - B - 0 = A - B which is positive for all values of A and B
+                    no borrow
+        carry = 1:  A - B - 1 which is 0 if A - B = 1 else positive always
+                    no borrow
+
+        A = B
+        ------
+        carry = 0:  A - B - 0 = A - B which is 0 always
+                    no borrow
+        carry = 1:  A - B - 1 which is always negative.
+                    borrow
+
+        A < B
+        ------
+        carry = 0:  A - B - 0 = A - B which is always negative
+                    borrow
+        carry = 1:  A - B - 1 which is always negative
+                    borrow
+
+        So we get borrow only if A < B or if (A == B & carry == 1)
+    */
+    // GBEMU_PRINT(("A: %02X, data8: %02X\n", gb_cpu->gb_reg.AF.A, data8));
+    (gb_cpu->gb_reg.AF.A < data8) ? set_carry(gb_cpu) : \
+        ((gb_cpu->gb_reg.AF.A == data8) ? (carryval ? set_carry(gb_cpu) : clear_carry(gb_cpu)) : \
+        clear_carry(gb_cpu));
 
     // Finally, now that all is done, we may store the final value in A
     gb_cpu->gb_reg.AF.A = result;
@@ -1105,52 +1154,43 @@ void daa(gb_cpu_t *gb_cpu)
         I didn't get this instruction as much. TBH if you ask me a question tom
         I'll just dodge you and pretend I didn't hear. This is the best explanation
         I can do.
+
+        EDIT: I HATE THIS INSTRUCTION AND I REFUSE TO IMPLEMENT IT HERE'S WHERE I TOOK
+        THE CODE FROM: 
+        https://stackoverflow.com/questions/45227884/z80-daa-implementation-and-blarggs-test-rom-issues
     */
 
     // Fetch opcode from memory
     gb_cpu->gb_reg.PC++;
 
-    // Case when last instruction was an addition
-    if (!(gb_cpu->gb_reg.AF.F & (1 << FLAG_BCD_ADDSUB)))
-    {
-        /*
-            In case of addition, we need to worry about both carry and overflow
-            Correct for higher nibble first cause then there is no need to worry
-            carry when correcting for the lower nibble.
-            Man TBH I did not understand why. If you want to know where I got this
-            from here's the reference:
-            https://forums.nesdev.org/viewtopic.php?t=15944#:~:text=The%20DAA%20
-            instruction%20adjusts%20the,%2C%20lower%20nybble%2C%20or%20both
+    int tmp = gb_cpu->gb_reg.AF.A;
 
-            I just can't wrap my head around this for some reason.
-        */
-        if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY) || \
-            (gb_cpu->gb_reg.AF.A > 0x99))
-        {
-            gb_cpu->gb_reg.AF.A += 0x60;
-            set_carry(gb_cpu);
-        }
-        // This corrects for lower nibble
-        if (gb_cpu->gb_reg.AF.F & (1 << FLAG_BCD_HALF_CARRY) || \
-            ((gb_cpu->gb_reg.AF.A & 0x0F) > 0x09))
-        {
-            gb_cpu->gb_reg.AF.A += 0x06;
-        }
-    }
-    // In case of subtraction, no need to correct for overflow
-    else
+    if ( ! ( gb_cpu->gb_reg.AF.F & (1 << FLAG_BCD_ADDSUB) ) ) 
     {
-        // Correct upper nibble
-        if (gb_cpu->gb_reg.AF.A & (1 << FLAG_CARRY))
-        {
-            gb_cpu->gb_reg.AF.A -= 0x60;
+        if ( ( gb_cpu->gb_reg.AF.F & (1 << FLAG_BCD_HALF_CARRY) ) || ( tmp & 0x0F ) > 9 )
+            tmp += 6;
+        if ( ( gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY) ) || tmp > 0x9F )
+            tmp += 0x60;
+    } 
+    else 
+    {
+        if ( gb_cpu->gb_reg.AF.F & (1 << FLAG_BCD_HALF_CARRY) ) {
+            tmp -= 6;
+            if ( ! ( gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY) ) )
+                tmp &= 0xFF;
         }
-        // Correct lower nibble
-        if (gb_cpu->gb_reg.AF.A & (1 << FLAG_BCD_HALF_CARRY))
-        {
-            gb_cpu->gb_reg.AF.A -= 0x06;
-        }
+        if ( gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY) )
+                tmp -= 0x60;
     }
+    gb_cpu->gb_reg.AF.F &= ~ ( (1 << FLAG_BCD_HALF_CARRY) | (1 << FLAG_ZERO) );
+    
+    if ( tmp & 0x100 )
+        gb_cpu->gb_reg.AF.F |= (1 << FLAG_CARRY);
+    
+    gb_cpu->gb_reg.AF.A = tmp & 0xFF;
+    
+    if ( ! gb_cpu->gb_reg.AF.A )
+        gb_cpu->gb_reg.AF.F |= (1 << FLAG_ZERO);
 
     /*
         Flags are Z - 0 -
@@ -1161,8 +1201,8 @@ void daa(gb_cpu_t *gb_cpu)
         next instruction. I guess that's why most of the flag information
         generated by DAA is discarded.
     */
-    (gb_cpu->gb_reg.AF.A == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
-    clear_halfcarry(gb_cpu);
+    // (gb_cpu->gb_reg.AF.A == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
+    // clear_halfcarry(gb_cpu);
 
     return;
 }
@@ -1351,8 +1391,9 @@ void cp(gb_cpu_t *gb_cpu)
     // Fetch operand by using resolution for selecting 8bit register
     else
     {
-        offset = (((opcode & 0x0F) - 8) + 2) & 9;
+        offset = (((opcode & 0x0F) - 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        // GBEMU_PRINT(("offset: %d, data8: %02X\n", offset, data8));
     }
 
     /*
@@ -1362,6 +1403,7 @@ void cp(gb_cpu_t *gb_cpu)
         H : Set if there is borrow from bit4
         C : Set if A < n
     */
+    // GBEMU_PRINT(("data8: %02X\n", data8));
     (gb_cpu->gb_reg.AF.A == data8) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
     set_addsub(gb_cpu);
     ((gb_cpu->gb_reg.AF.A & 0x0F) < (data8 & 0x0F)) ? \
@@ -1650,8 +1692,16 @@ void pop(gb_cpu_t *gb_cpu)
             - Step4: Increment SP
 
         Exact opposite operation of PUSH. As advertized.
+
+        EDIT: IMPORTANT NOTE!!!!
+        With POP AF and specifically POP AF, F cannot hold any values
+        other than 0 in its lower nibble. For instance, if we are popping
+        0x9B to AF, 0x90 will reach AF after popping. Hence the masking is
+        done in case we are popping to AF.
     */
-    *(datalow) = gb_cpu->gb_mem[gb_cpu->gb_reg.SP++];
+    *(datalow) = ((offset == 0) ? \
+        (gb_cpu->gb_mem[gb_cpu->gb_reg.SP++] & 0xF0) : \
+        (gb_cpu->gb_mem[gb_cpu->gb_reg.SP++]));
     *(datahigh) = gb_cpu->gb_mem[gb_cpu->gb_reg.SP++];
     return;
 }
@@ -1685,6 +1735,8 @@ void jr(gb_cpu_t *gb_cpu)
     opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
     jmpoffset8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
 
+    
+
     /*
         There are only 5 opcodes of JR. Thought I'd just hardcode them. Making logic and
         all for 5 instructions felt like overkill
@@ -1703,7 +1755,7 @@ void jr(gb_cpu_t *gb_cpu)
 
         // Jump if not carry
         case 0x30:
-            (gb_cpu->gb_reg.AF.A & (1 << FLAG_CARRY)) ? (jmpyn = 0) : (jmpyn = 1);
+            (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) ? (jmpyn = 0) : (jmpyn = 1);
             break;
 
         // Jump if zero
@@ -1713,13 +1765,16 @@ void jr(gb_cpu_t *gb_cpu)
 
         // Jump if carry
         case 0x38:
-            (gb_cpu->gb_reg.AF.A & (1 << FLAG_CARRY)) ? (jmpyn = 1) : (jmpyn = 0);
+            (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) ? (jmpyn = 1) : (jmpyn = 0);
             break;
     }
 
     // In case the condition passed, or we have an unconditonal jump, then update PC
     if (jmpyn)
-        gb_cpu->gb_reg.PC += jmpoffset8;
+    {
+        gb_cpu->gb_reg.PC = gb_cpu->gb_reg.PC + \
+            ((jmpoffset8 & 0x80) ? (0xFF00 | jmpoffset8) : (0x0000 | jmpoffset8));
+    }
 
     return;
 }
@@ -1762,8 +1817,8 @@ void jp(gb_cpu_t *gb_cpu)
     // Hardcoding case where we fetch address from HL
     if (opcode == 0xE9)
     {
-        lsb = gb_cpu->gb_mem[gb_cpu->gb_reg.HL.L];
-        msb = gb_cpu->gb_mem[gb_cpu->gb_reg.HL.H];
+        lsb = gb_cpu->gb_reg.HL.L;
+        msb = gb_cpu->gb_reg.HL.H;
         /*
             We have the address. Jump directly.
             No conditions for this case.
@@ -1802,6 +1857,9 @@ void jp(gb_cpu_t *gb_cpu)
                     goto nojmp;
                 else
                     goto jmp;
+            }
+            else
+            {
                 if(gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
                     goto nojmp;
                 else
@@ -1816,6 +1874,9 @@ void jp(gb_cpu_t *gb_cpu)
                     goto jmp;
                 else 
                     goto nojmp;
+            }
+            else
+            {
                 if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
                     goto jmp;
                 else
@@ -1866,12 +1927,6 @@ void call(gb_cpu_t *gb_cpu)
     data16 = (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++]) | \
              (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++] << 8);
 
-    // Save the current PC into stack. Remember we intend to come back later
-    gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
-        ((gb_cpu->gb_reg.PC & 0xFF00) >> 8);
-    gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
-        (gb_cpu->gb_reg.PC & 0x00FF);
-
     /*
         Using switch case as there are only 5 cases. I remember using resolution
         technique for another instruction (jp?) having only 5 cases and was messy
@@ -1920,7 +1975,14 @@ void call(gb_cpu_t *gb_cpu)
 
 // If the condition is true, update PC before return
 call:
+    // Save the current PC into stack. Remember we intend to come back later
+    gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
+        ((gb_cpu->gb_reg.PC & 0xFF00) >> 8);
+    gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
+        (gb_cpu->gb_reg.PC & 0x00FF);
+
     gb_cpu->gb_reg.PC = data16;
+
 // If condition is false, do not update PC, return directly
 nocall:
     return;
@@ -1952,18 +2014,18 @@ void ret(gb_cpu_t *gb_cpu)
 
         // return if Zero flag set
         case 0xD0:
-            if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
-                goto endcall;
-            else
-                goto noendcall;
-            break;
-
-        // return if Carry flag not set
-        case 0xC8:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
                 goto noendcall;
             else
                 goto endcall;
+            break;
+
+        // return if Carry flag not set
+        case 0xC8:
+            if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+                goto endcall;
+            else
+                goto noendcall;
             break;
 
         // return if Carry flag set
@@ -2023,10 +2085,14 @@ void rst(gb_cpu_t *gb_cpu)
         so we have incremented PC once) to the stack. Then, we set the PC to
         the corresponding jump vector decided by the opcode.
     */
+    uint16_t oldPC;
     uint8_t opcode, offset;
 
     // Fetch opcode from memory
     opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+
+    // Store old SP: if SP is back that means old PC has been POPed
+    oldPC = gb_cpu->gb_reg.PC;
 
     // Push PC to stack
     gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
@@ -2061,6 +2127,8 @@ void rst(gb_cpu_t *gb_cpu)
 
     // Set the PC to the jump vector
     gb_cpu->gb_reg.PC = (uint16_t)(0x0000 + offset);
+    while (!(gb_cpu->gb_reg.PC == oldPC))
+        isa[gb_cpu->gb_mem[gb_cpu->gb_reg.PC]](gb_cpu);
     return;
 }
 
@@ -2200,7 +2268,7 @@ void rr(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     }
 
     bit0 = (data8 & 0x01);
-    data8 = (data8 << 1) | \
+    data8 = (data8 >> 1) | \
             ((gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) << (7 - FLAG_CARRY));
     (cb_opcode == 0x1E) ? mem_write(gb_cpu, data16, data8) : \
                           (*reg8ptr = data8);
@@ -2486,6 +2554,40 @@ void pfcb(gb_cpu_t *gb_cpu)
     gb_cpu->gb_reg.PC++;
     cb_opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
     prefix_cb[cb_opcode](gb_cpu, cb_opcode);
+
+    return;
+}
+
+void processInterrupts(gb_cpu_t *gb_cpu)
+{
+    uint8_t ie, iflag, pwr;
+
+    if (gb_cpu->ime)
+    {
+        ie = mem_read(gb_cpu, GB_INTR_ENAB_REG);
+        iflag = mem_read(gb_cpu, GB_INTR_FLAG_REG);
+        
+        if (ie & iflag)
+        {
+            gb_cpu->ime = 0;
+
+            gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
+                (uint8_t)((gb_cpu->gb_reg.PC & 0xFF00) >> 8);
+            gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
+                (uint8_t)(gb_cpu->gb_reg.PC & 0x00FF);
+
+            for (pwr = 0; pwr < 5; pwr++)
+                if ((ie & iflag) & (1 << pwr))
+                    break;
+
+            // for (pwr = 0; (calc/2) != 0; calc /= 2, pwr++);
+            gb_cpu->gb_reg.PC = 0x40 + ((pwr/2)*0x10) + ((pwr%2)*0x08);
+
+            iflag &= ~(1 << pwr);
+            mem_write(gb_cpu, GB_INTR_FLAG_REG, iflag);
+            // FIXES FOR NESTED INTRS!!
+        }
+    }
 
     return;
 }
