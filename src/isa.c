@@ -4,7 +4,7 @@
 #include <utils.h>
 
 /* CPU related instructions */
-void nop(gb_cpu_t *gb_cpu)
+uint8_t nop(gb_cpu_t *gb_cpu)
 {
     /*
         The reason why we are incrementing PC is that it signifies opcode fetch
@@ -16,10 +16,10 @@ void nop(gb_cpu_t *gb_cpu)
         you see this later
     */
     gb_cpu->gb_reg.PC++;
-    return;
+    return 1;
 }
 
-void stop(gb_cpu_t *gb_cpu)
+uint8_t stop(gb_cpu_t *gb_cpu)
 {
     /*
         STOP
@@ -29,9 +29,10 @@ void stop(gb_cpu_t *gb_cpu)
         the Button interrupt. 
     */
     gb_cpu->gb_reg.PC++;
+    return 1;
 }
 
-void halt(gb_cpu_t *gb_cpu)
+uint8_t halt(gb_cpu_t *gb_cpu)
 {
     /*
         HALT.
@@ -69,10 +70,10 @@ void halt(gb_cpu_t *gb_cpu)
     if (gb_cpu->ime != 0)
         /* CALL ISR HERE */
 
-    return;
+    return 1;
 }
 
-void ccf(gb_cpu_t *gb_cpu)
+uint8_t ccf(gb_cpu_t *gb_cpu)
 {
     /*
         Clear Carry Flag: clears the carry flag if set
@@ -86,10 +87,10 @@ void ccf(gb_cpu_t *gb_cpu)
     (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) ? \
         clear_carry(gb_cpu) : set_carry(gb_cpu);
 
-    return;
+    return 1;
 }
 
-void scf(gb_cpu_t *gb_cpu)
+uint8_t scf(gb_cpu_t *gb_cpu)
 {
     /*
         Set Carry Flag: sets the carry flag if set
@@ -102,10 +103,10 @@ void scf(gb_cpu_t *gb_cpu)
     clear_halfcarry(gb_cpu);
     set_carry(gb_cpu);
 
-    return;
+    return 1;
 }
 
-void di(gb_cpu_t *gb_cpu)
+uint8_t di(gb_cpu_t *gb_cpu)
 {
     /*
         Disable Interrupts: Disables the master interrupt enable flag
@@ -114,10 +115,10 @@ void di(gb_cpu_t *gb_cpu)
     */
     gb_cpu->gb_reg.PC++;
     gb_cpu->ime = 0;
-    return;
+    return 1;
 }
 
-void ei(gb_cpu_t *gb_cpu)
+uint8_t ei(gb_cpu_t *gb_cpu)
 {
     /*
         Enable interrupts: Enables the master interrupt enable flag
@@ -125,11 +126,11 @@ void ei(gb_cpu_t *gb_cpu)
     */
     gb_cpu->gb_reg.PC++;
     gb_cpu->ime = 1;
-    return;
+    return 1;
 }
 
 /* Load/Store instructions */
-void ld(gb_cpu_t *gb_cpu)
+uint8_t ld(gb_cpu_t *gb_cpu)
 {
     /*
         load instruction
@@ -171,7 +172,7 @@ void ld(gb_cpu_t *gb_cpu)
 
         YEAH. That many. Get ready for some sleepless nights if you tryna code yourself.
     */
-    uint8_t opcode, data8, offset;
+    uint8_t opcode, data8, offset, cycles;
     uint8_t *reg8ptr, *reg16high_ptr, *reg16low_ptr;
     uint16_t data16;
 
@@ -183,7 +184,7 @@ void ld(gb_cpu_t *gb_cpu)
     {
         gb_cpu->gb_reg.SP = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                             (uint16_t)(gb_cpu->gb_reg.HL.L);
-        return;
+        return 2;
     }
 
 
@@ -194,7 +195,7 @@ void ld(gb_cpu_t *gb_cpu)
                  (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.PC++] << 8);
         mem_write(gb_cpu, data16, (uint8_t)(gb_cpu->gb_reg.SP & 0x00FF));
         mem_write(gb_cpu, data16+1, (uint8_t)((gb_cpu->gb_reg.SP & 0xFF00) >> 8));
-        return;
+        return 3;
     }
 
     /*
@@ -247,7 +248,7 @@ void ld(gb_cpu_t *gb_cpu)
         set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
         (((gb_cpu->gb_reg.SP & 0xFF)+(uint16_t)(data8 & 0xFF)) & 0x100) ? \
         set_carry(gb_cpu) : clear_carry(gb_cpu);
-        return;
+        return 3;
     }
 
     /*
@@ -284,7 +285,13 @@ void ld(gb_cpu_t *gb_cpu)
         // GBEMU_PRINT(("data16 is %04x\n", data16));
         ((opcode & 0xF0) == 0xE0) ? (mem_write(gb_cpu, data16, gb_cpu->gb_reg.AF.A)) : \
                                     (gb_cpu->gb_reg.AF.A = mem_read(gb_cpu, data16));
-        return;
+        
+        if ((opcode & 0x0F) == 0x0A)
+            return 4;
+        else if ((opcode & 0x0F) == 0x00)
+            return 3;
+        else
+            return 2;
     }
 
     /*
@@ -304,7 +311,7 @@ void ld(gb_cpu_t *gb_cpu)
         if (opcode == 0x31)
         {
             gb_cpu->gb_reg.SP = data16;
-            return;
+            return 3;
         }
         // For all register sets other than SP
         else
@@ -318,7 +325,7 @@ void ld(gb_cpu_t *gb_cpu)
             // Load the 16bit value into the 16bit register
             *reg16high_ptr = (uint8_t)((data16 & 0xFF00) >> 8);
             *reg16low_ptr = (uint8_t)(data16 & 0x00FF);
-            return;
+            return 3;
         }
     }
 
@@ -375,7 +382,7 @@ void ld(gb_cpu_t *gb_cpu)
         ((opcode & 0x0F) == 0x02) ? \
             (mem_write(gb_cpu, data16, gb_cpu->gb_reg.AF.A)) : \
             (gb_cpu->gb_reg.AF.A = mem_read(gb_cpu, data16));
-        return;
+        return 2;
     }
 
     /*
@@ -397,12 +404,12 @@ void ld(gb_cpu_t *gb_cpu)
         {
             data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
             mem_write(gb_cpu, data16, data8);
-            return;
+            return 3;
         }
         if (opcode == 0x3E)
         {
             gb_cpu->gb_reg.AF.A = data8;
-            return;
+            return 2;
         }
 
         /*
@@ -415,7 +422,7 @@ void ld(gb_cpu_t *gb_cpu)
                              (((opcode & 0x0F) == 0x0E) ? 1 : 0));
         
         *reg8ptr = data8;
-        return;
+        return 2;
     }
 
     /*
@@ -454,7 +461,7 @@ void ld(gb_cpu_t *gb_cpu)
 
             // Write to calculated address with data received from calculated register.
             mem_write(gb_cpu, data16, data8);
-            return;
+            return 2;
         }
         // Now do the same as above, only accumulator is used as the register to load data into.
         else
@@ -463,14 +470,16 @@ void ld(gb_cpu_t *gb_cpu)
             {
                 data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
                 data8 = mem_read(gb_cpu, data16);
+                cycles = 2;
             }
             else
             {
                 offset = (((opcode & 0x0F) - 0x08) + 2) % 9;
                 data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+                cycles = 1;
             }
             gb_cpu->gb_reg.AF.A = data8;
-            return;
+            return cycles;
         }
     }
 
@@ -507,20 +516,21 @@ void ld(gb_cpu_t *gb_cpu)
     {
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
-        // GBEMU_PRINT(("data8: %02X, data16: %04X\n", data8, data16));
+        cycles = 2;
     }
     else
     {
         offset = (((opcode & 0x0F) % 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        cycles = 1;
     }
 
     *reg8ptr = data8;
-    return;
+    return cycles;
 }
 
 /* Increment/Decrement instructions */
-void inc(gb_cpu_t *gb_cpu)
+uint8_t inc(gb_cpu_t *gb_cpu)
 {
     /*
         Increment: increment value in register/memory
@@ -542,7 +552,7 @@ void inc(gb_cpu_t *gb_cpu)
         Same comment goes for decrement operation, so not putting any 
         comment there.
     */
-    uint8_t idx, reg_set, data8, opcode;
+    uint8_t idx, reg_set, data8, opcode, cycles;
     uint16_t data16;
     uint8_t *data;
 
@@ -574,7 +584,7 @@ void inc(gb_cpu_t *gb_cpu)
         if (idx == 0x08)
         {
             gb_cpu->gb_reg.SP++;
-            return;
+            return 2;
         }
 
         /*
@@ -596,7 +606,7 @@ void inc(gb_cpu_t *gb_cpu)
 
         *datahigh = (uint8_t)((data16 & 0xFF00) >> 8);
         *datalow = (uint8_t)(data16 & 0x00FF);
-        return;
+        return 2;
     }
 
     /*
@@ -617,12 +627,14 @@ void inc(gb_cpu_t *gb_cpu)
             data8 = mem_read(gb_cpu, data16) + 1;
             mem_write(gb_cpu, data16, data8);
             data = &data8;
+            cycles = 3;
             goto flag_update;
         }
         else
         {
             data = (uint8_t *)(&(gb_cpu->gb_reg.AF.A));
             (*data)++;
+            cycles = 1;
             goto flag_update;
         }
     }
@@ -641,10 +653,10 @@ flag_update:
     (*data == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
     clear_addsub(gb_cpu);
     ((*data & 0x0F) == 0x00) ? set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
-    return;
+    return cycles;
 }
 
-void dec(gb_cpu_t *gb_cpu)
+uint8_t dec(gb_cpu_t *gb_cpu)
 {
     /*
         Decrement operation: decrement value of register/memory
@@ -652,7 +664,7 @@ void dec(gb_cpu_t *gb_cpu)
         The code is same as increment too. All comments there
         are valid here too.
     */
-    uint8_t idx, reg_set, data8, opcode;
+    uint8_t idx, reg_set, data8, opcode, cycles;
     uint16_t data16;
     uint8_t *data;
 
@@ -665,7 +677,7 @@ void dec(gb_cpu_t *gb_cpu)
         if (idx == 0x08)
         {
             gb_cpu->gb_reg.SP--;
-            return;
+            return 2;
         }
         uint8_t *datahigh;
         uint8_t *datalow;
@@ -676,7 +688,7 @@ void dec(gb_cpu_t *gb_cpu)
 
         *datahigh = (uint8_t)((data16 & 0xFF00) >> 8);
         *datalow = (uint8_t)(data16 & 0x00FF);
-        return;
+        return 2;
     }
 
     reg_set = ((opcode & 0x0F) == 0x05)?0:1;
@@ -690,12 +702,14 @@ void dec(gb_cpu_t *gb_cpu)
             data8 = mem_read(gb_cpu, data16) - 1;
             mem_write(gb_cpu, data16, data8);
             data = &data8;
+            cycles = 3;
             goto flag_update;
         }
         else
         {
             data = (uint8_t *)((&gb_cpu->gb_reg.AF.A));
             (*data)--;
+            cycles = 1;
             goto flag_update;
         }
     }
@@ -708,11 +722,11 @@ flag_update:
     (*data == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
     set_addsub(gb_cpu);
     ((*data & 0x0F) == 0x0F) ? set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
-    return;
+    return cycles;
 }
 
 /* Arithmetic operations */
-void add(gb_cpu_t *gb_cpu)
+uint8_t add(gb_cpu_t *gb_cpu)
 {
     /*
         Add: Add two registers/register with memory
@@ -756,7 +770,7 @@ void add(gb_cpu_t *gb_cpu)
         I might have used an excess of variables than required on this one,
         but i had to for a) My sanity b) Clarity on what I was doing.
     */
-    uint8_t opcode, data8, offset, orgAval;
+    uint8_t opcode, data8, offset, orgAval, cycles;
     uint16_t data16, primary16, result16;
 
     // Fetch opcode from memory
@@ -786,7 +800,7 @@ void add(gb_cpu_t *gb_cpu)
             set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
         (((primary16 & 0x00FF)+data8) & 0x0100) ? \
             set_carry(gb_cpu) : clear_carry(gb_cpu);
-        return;
+        return 4;
     }
 
     // Case ADD A, r. 8 bit addition.
@@ -794,7 +808,10 @@ void add(gb_cpu_t *gb_cpu)
     {
         // Hardcoding opcode case where 8 bit operand is fetched from memory
         if (opcode == 0xC6)
+        {
             data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+            cycles = 2;
+        }
         /* 
             Hardcoding opcode case where 8 bit operand is fetched from memory indexed
             by address stored in HL
@@ -803,10 +820,14 @@ void add(gb_cpu_t *gb_cpu)
         {
             data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
             data8 = mem_read(gb_cpu, data16);
+            cycles = 2;
         }
         // Hardcoding case where other operand is A itself
         else if (opcode == 0x87)
+        {
             data8 = gb_cpu->gb_reg.AF.A;
+            cycles = 1;
+        }
         // With all the special cases asside, we may now work with the generic case
         else
         {
@@ -817,6 +838,7 @@ void add(gb_cpu_t *gb_cpu)
             */
             offset = 2+(opcode & 0x0F);
             data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+            cycles = 1;
         }
 
         // Saving value of A before addition for flag calculation purposes
@@ -834,7 +856,7 @@ void add(gb_cpu_t *gb_cpu)
             set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
         (orgAval > (0xFF - data8)) ?
             set_carry(gb_cpu) : clear_carry(gb_cpu);
-        return;
+        return cycles;
     }
 
     /*
@@ -874,10 +896,10 @@ void add(gb_cpu_t *gb_cpu)
         set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
     (primary16 > (0xFFFF - data16)) ?
         set_carry(gb_cpu) : clear_carry(gb_cpu);
-    return;
+    return 2;
 }
 
-void adc(gb_cpu_t *gb_cpu)
+uint8_t adc(gb_cpu_t *gb_cpu)
 {
     /*
         ADC: Add 8bit register/memory value along with carry to accumulator
@@ -907,7 +929,7 @@ void adc(gb_cpu_t *gb_cpu)
             carryout = (result & 0x100) = (0x1FF & 0x100) = 0x100
         which makes it easier. But is kinda cheating if you ask me.
     */
-    uint8_t opcode, data8, offset, carryval;
+    uint8_t opcode, data8, offset, carryval, cycles;
     uint16_t result, data16;
 
     // Fetch opcode from memory
@@ -915,7 +937,10 @@ void adc(gb_cpu_t *gb_cpu)
 
     // Hardcoding case where we fetch 8bit operand from memory
     if (opcode == 0xCE)
+    {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
+    }
     /*
         Hardcoding case where we fetch 8bit operand from memory located
         at address stored in 16bit register HL.
@@ -925,6 +950,7 @@ void adc(gb_cpu_t *gb_cpu)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 2;
     }
     // Case where we fetch 8bit operand from 8bit registers
     else
@@ -932,6 +958,7 @@ void adc(gb_cpu_t *gb_cpu)
         // 8bit register resolution. We know the drill by now
         offset = (((opcode & 0x0F) - 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        cycles = 1;
     }
     // Get the current carry value
     carryval = (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) >> FLAG_CARRY;
@@ -951,12 +978,12 @@ void adc(gb_cpu_t *gb_cpu)
     // Finally, now that all is done, we may store the final value in A
     gb_cpu->gb_reg.AF.A = (uint8_t)(result & 0xFF);
 
-    return;
+    return cycles;
 }
 
-void sub(gb_cpu_t *gb_cpu)
+uint8_t sub(gb_cpu_t *gb_cpu)
 {
-    uint8_t opcode, data8, offset, result;
+    uint8_t opcode, data8, offset, result, cycles;
     uint16_t data16;
 
     // Fetch opcode from memory
@@ -964,7 +991,10 @@ void sub(gb_cpu_t *gb_cpu)
 
     // Hardcoding case where we fetch 8bit operand from memory
     if (opcode == 0xD6)
+    {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
+    }
     /*
         Hardcoding case where we fetch 8bit operand from memory located
         at address stored in 16bit register HL.
@@ -974,6 +1004,7 @@ void sub(gb_cpu_t *gb_cpu)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 2;
     }
     // Case where we fetch 8bit operand from 8bit registers
     else
@@ -981,6 +1012,7 @@ void sub(gb_cpu_t *gb_cpu)
         // 8bit register resolution. We know the drill by now
         offset = ((opcode & 0x0F) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        cycles = 1;
     }
     // Save the result in an 8bit store
     result = gb_cpu->gb_reg.AF.A-data8;
@@ -998,10 +1030,10 @@ void sub(gb_cpu_t *gb_cpu)
     // Finally, now that all is done, we may store the final value in A
     gb_cpu->gb_reg.AF.A = result;
 
-    return;
+    return cycles;
 }
 
-void sbc(gb_cpu_t *gb_cpu)
+uint8_t sbc(gb_cpu_t *gb_cpu)
 {
     /*
         SBC: Subtract 8bit register/memory and carry from accumulator
@@ -1011,7 +1043,7 @@ void sbc(gb_cpu_t *gb_cpu)
         to simply check for A < (n - cy). I am ashamed already,
         no need to look at me.
     */
-    uint8_t opcode, data8, offset, carryval, result;
+    uint8_t opcode, data8, offset, carryval, result, cycles;
     uint16_t data16;
 
     // Fetch opcode from memory
@@ -1019,7 +1051,10 @@ void sbc(gb_cpu_t *gb_cpu)
 
     // Hardcoding case where we fetch 8bit operand from memory
     if (opcode == 0xDE)
+    {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
+    }
     /*
         Hardcoding case where we fetch 8bit operand from memory located
         at address stored in 16bit register HL.
@@ -1029,6 +1064,7 @@ void sbc(gb_cpu_t *gb_cpu)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 2;
     }
     // Case where we fetch 8bit operand from 8bit registers
     else
@@ -1036,6 +1072,7 @@ void sbc(gb_cpu_t *gb_cpu)
         // 8bit register resolution. We know the drill by now
         offset = (((opcode & 0x0F) - 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        cycles = 1;
     }
     // Get the current carry value
     carryval = (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY)) >> FLAG_CARRY;
@@ -1090,10 +1127,10 @@ void sbc(gb_cpu_t *gb_cpu)
     // Finally, now that all is done, we may store the final value in A
     gb_cpu->gb_reg.AF.A = result;
 
-    return;
+    return cycles;
 }
 
-void daa(gb_cpu_t *gb_cpu)
+uint8_t daa(gb_cpu_t *gb_cpu)
 {
     /*
         DAA: Decimal adjust accumulator to BCD format
@@ -1204,16 +1241,16 @@ void daa(gb_cpu_t *gb_cpu)
     // (gb_cpu->gb_reg.AF.A == 0) ? set_zero(gb_cpu) : clear_zero(gb_cpu);
     // clear_halfcarry(gb_cpu);
 
-    return;
+    return 1;
 }
 
-void _and(gb_cpu_t *gb_cpu)
+uint8_t _and(gb_cpu_t *gb_cpu)
 {
     /*
         _and: Perform bitwise and with the accumulator
         Nothing of note. Simple enough. Bitwise AND with the register A.
     */
-    uint8_t opcode, data8, offset;
+    uint8_t opcode, data8, offset, cycles;
     uint16_t data16;
 
     // Fetch opcode from memory
@@ -1221,12 +1258,16 @@ void _and(gb_cpu_t *gb_cpu)
 
     // Hardcode case where 8bit data is fetched from memory
     if (opcode == 0xE6)
+    {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
+    }
     // Hardcode case where 8bit data is fetched from memory located at address stored in HL
     else if (opcode == 0xA6)
     {
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 2;
     }
     // Cases where general purpose registers are used to get 8bit data
     else
@@ -1234,6 +1275,7 @@ void _and(gb_cpu_t *gb_cpu)
         // Checkout ld instruction's comments to see how this resolution works
         offset = ((opcode & 0x0F) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg) + offset));
+        cycles = 1;
     }
 
     // Perform bitwise AND with accumulator
@@ -1244,10 +1286,10 @@ void _and(gb_cpu_t *gb_cpu)
     clear_addsub(gb_cpu);
     set_halfcarry(gb_cpu);
     clear_carry(gb_cpu);
-    return;
+    return cycles;
 }
 
-void _or(gb_cpu_t *gb_cpu)
+uint8_t _or(gb_cpu_t *gb_cpu)
 {
     /*
         _or: Perform bitwise or with the accumulator
@@ -1256,7 +1298,8 @@ void _or(gb_cpu_t *gb_cpu)
         means A = A | A. Now why would you need that instruction,
         I don't know. But it is there. So yeah.
     */
-    uint8_t opcode, data8;
+    uint8_t opcode, data8, cycles, idx;
+    uint16_t addr;
 
     // Fetch opcode from memory
     opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
@@ -1273,6 +1316,7 @@ void _or(gb_cpu_t *gb_cpu)
     if (opcode == 0xF6)
     {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
     }
     /*
         Hardcoding case where we get the 8bit data from memory
@@ -1280,10 +1324,9 @@ void _or(gb_cpu_t *gb_cpu)
     */
     else if (opcode == 0xB6)
     {
-        uint16_t addr;
-
         addr = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, addr);
+        cycles = 2;
     }
     /*
         We use the same philosophy as we always have. We use 
@@ -1295,10 +1338,9 @@ void _or(gb_cpu_t *gb_cpu)
     */
     else
     {
-        uint8_t idx;
-
         idx = ((opcode & 0x0F) == 0x07) ? 0 : (2 + (opcode & 0x0F));
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+idx));
+        cycles = 1;
     }
 
     // Actual OR operation performed here
@@ -1312,16 +1354,16 @@ void _or(gb_cpu_t *gb_cpu)
     clear_addsub(gb_cpu);
     clear_halfcarry(gb_cpu);
     clear_carry(gb_cpu);
-    return;
+    return cycles;
 }
 
-void _xor(gb_cpu_t *gb_cpu)
+uint8_t _xor(gb_cpu_t *gb_cpu)
 {
     /*
         _xor: Perform bitwise xor over accumulator
         Nothing of note. Just a bitwise operation.
     */
-    uint8_t opcode, data8, offset;
+    uint8_t opcode, data8, offset, cycles;
     uint16_t data16;
 
     // Fetch opcode from memory
@@ -1329,12 +1371,16 @@ void _xor(gb_cpu_t *gb_cpu)
 
     // Hardcode case where 8bit data is fetched from memory
     if (opcode == 0xEE)
+    {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
+    }
     // Hardcode case where 8bit data is fetched from memory located at address stored in HL
     else if (opcode == 0xAE)
     {
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 2;
     }
     // Cases where general purpose registers are used to get 8bit data
     else
@@ -1342,6 +1388,7 @@ void _xor(gb_cpu_t *gb_cpu)
         // Checkout ld instruction's comments to see how this resolution works
         offset = (((opcode & 0x0F) - 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg) + offset));
+        cycles = 1;
     }
 
     // Perform bitwise AND with accumulator
@@ -1352,10 +1399,10 @@ void _xor(gb_cpu_t *gb_cpu)
     clear_addsub(gb_cpu);
     clear_halfcarry(gb_cpu);
     clear_carry(gb_cpu);
-    return;
+    return cycles;
 }
 
-void cp(gb_cpu_t *gb_cpu)
+uint8_t cp(gb_cpu_t *gb_cpu)
 {
     /*
         cp: compare accumulator with data
@@ -1369,7 +1416,7 @@ void cp(gb_cpu_t *gb_cpu)
         will already do this for us and hence use C's abstraction of <, ==, >
         operators to implement this instruction.
     */
-    uint8_t opcode, data8, offset;
+    uint8_t opcode, data8, offset, cycles;
     uint16_t data16;
 
     // Fetch opcode from memory
@@ -1377,7 +1424,10 @@ void cp(gb_cpu_t *gb_cpu)
 
     // Hardcode case where we fetch the 8bit operand from memory
     if (opcode == 0xFE)
+    {
         data8 = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
+        cycles = 2;
+    }
     /*
         Hardcode case where we fetch the 8bit operand from memory located at
         address stored in 16bit register HL
@@ -1387,13 +1437,14 @@ void cp(gb_cpu_t *gb_cpu)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 2;
     }
     // Fetch operand by using resolution for selecting 8bit register
     else
     {
         offset = (((opcode & 0x0F) - 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
-        // GBEMU_PRINT(("offset: %d, data8: %02X\n", offset, data8));
+        cycles = 1;
     }
 
     /*
@@ -1409,10 +1460,10 @@ void cp(gb_cpu_t *gb_cpu)
     ((gb_cpu->gb_reg.AF.A & 0x0F) < (data8 & 0x0F)) ? \
         set_halfcarry(gb_cpu) : clear_halfcarry(gb_cpu);
     (gb_cpu->gb_reg.AF.A < data8) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
-    return;
+    return cycles;
 }
 
-void cpl(gb_cpu_t *gb_cpu)
+uint8_t cpl(gb_cpu_t *gb_cpu)
 {
     /*
         cpl: Complement accumulator.
@@ -1450,11 +1501,11 @@ void cpl(gb_cpu_t *gb_cpu)
     set_addsub(gb_cpu);
     set_halfcarry(gb_cpu);
 
-    return;
+    return 1;
 }
 
 /* Rotate Instructions */
-void rlca(gb_cpu_t *gb_cpu)
+uint8_t rlca(gb_cpu_t *gb_cpu)
 {
     /*
         Rotate left affect carry.
@@ -1486,10 +1537,10 @@ void rlca(gb_cpu_t *gb_cpu)
     clear_zero(gb_cpu);
     clear_addsub(gb_cpu);
     clear_halfcarry(gb_cpu);
-    return;
+    return 1;
 }
 
-void rrca(gb_cpu_t *gb_cpu)
+uint8_t rrca(gb_cpu_t *gb_cpu)
 {
     /*
         Rotate right affect carry.
@@ -1513,10 +1564,10 @@ void rrca(gb_cpu_t *gb_cpu)
     clear_zero(gb_cpu);
     clear_addsub(gb_cpu);
     clear_halfcarry(gb_cpu);
-    return;
+    return 1;
 }
 
-void rla(gb_cpu_t *gb_cpu)
+uint8_t rla(gb_cpu_t *gb_cpu)
 {
     /*
         Rotate A left through carry.
@@ -1551,10 +1602,10 @@ void rla(gb_cpu_t *gb_cpu)
     clear_zero(gb_cpu);
     clear_addsub(gb_cpu);
     clear_halfcarry(gb_cpu);
-    return;
+    return 1;
 }
 
-void rra(gb_cpu_t *gb_cpu)
+uint8_t rra(gb_cpu_t *gb_cpu)
 {
     /*
         Rotate right through carry.
@@ -1579,11 +1630,11 @@ void rra(gb_cpu_t *gb_cpu)
     clear_zero(gb_cpu);
     clear_addsub(gb_cpu);
     clear_halfcarry(gb_cpu);
-    return;
+    return 1;
 }
 
 /* Stack Instructions */
-void push(gb_cpu_t *gb_cpu)
+uint8_t push(gb_cpu_t *gb_cpu)
 {
     /*
         Push: Pushes 16bit register onto stack
@@ -1637,10 +1688,10 @@ void push(gb_cpu_t *gb_cpu)
         *((uint8_t *)((unsigned long)(&(gb_cpu->gb_reg))+offset));
     gb_cpu->gb_mem[--gb_cpu->gb_reg.SP] = \
         *((uint8_t *)((unsigned long)(&(gb_cpu->gb_reg))+offset+1));
-    return;
+    return 4;
 }
 
-void pop(gb_cpu_t *gb_cpu)
+uint8_t pop(gb_cpu_t *gb_cpu)
 {
     /*
         Pop: pops 16bit data onto given register from stack
@@ -1703,11 +1754,11 @@ void pop(gb_cpu_t *gb_cpu)
         (gb_cpu->gb_mem[gb_cpu->gb_reg.SP++] & 0xF0) : \
         (gb_cpu->gb_mem[gb_cpu->gb_reg.SP++]));
     *(datahigh) = gb_cpu->gb_mem[gb_cpu->gb_reg.SP++];
-    return;
+    return 4;
 }
 
 /* Jump/Call Instructions */
-void jr(gb_cpu_t *gb_cpu)
+uint8_t jr(gb_cpu_t *gb_cpu)
 {
     /*
         Jump with offset
@@ -1729,7 +1780,7 @@ void jr(gb_cpu_t *gb_cpu)
                                                 |                       |
                                     Land here if cond == false          land here if cond == true
     */
-    uint8_t opcode, jmpoffset8, jmpyn = 1;
+    uint8_t opcode, jmpoffset8, cycles, jmpyn = 1;
 
     // Fetch opcode and offset from memory
     opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
@@ -1774,12 +1825,15 @@ void jr(gb_cpu_t *gb_cpu)
     {
         gb_cpu->gb_reg.PC = gb_cpu->gb_reg.PC + \
             ((jmpoffset8 & 0x80) ? (0xFF00 | jmpoffset8) : (0x0000 | jmpoffset8));
+        cycles = 3;
     }
+    else
+        cycles = 2;
 
-    return;
+    return cycles;
 }
 
-void jp(gb_cpu_t *gb_cpu)
+uint8_t jp(gb_cpu_t *gb_cpu)
 {
     /*
         Jump: Conditional/Unconditional jump to 16bit address
@@ -1808,7 +1862,7 @@ void jp(gb_cpu_t *gb_cpu)
         increment PC after jump has been handled, landing you at 0x1001.
         Which isn't correct.
     */
-    uint8_t opcode, lsb, msb;
+    uint8_t opcode, lsb, msb, cycles;
     uint16_t addr16;
 
     // Fetch opcode from memory
@@ -1823,6 +1877,7 @@ void jp(gb_cpu_t *gb_cpu)
             We have the address. Jump directly.
             No conditions for this case.
         */
+        cycles = 1;
         goto jmp;
     }
 
@@ -1838,7 +1893,10 @@ void jp(gb_cpu_t *gb_cpu)
 
     // Hardcoding for unconditional jump
     if (opcode == 0xC3)
+    {
+        cycles = 4;
         goto jmp;
+    }
 
     /*
         Conditional Jumps.
@@ -1854,16 +1912,28 @@ void jp(gb_cpu_t *gb_cpu)
             if ((opcode & 0xF0) == 0xC0)
             {
                 if(gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+                {
+                    cycles = 3;
                     goto nojmp;
+                }
                 else
+                {
+                    cycles = 4;
                     goto jmp;
+                }
             }
             else
             {
                 if(gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
+                {
+                    cycles = 3;
                     goto nojmp;
+                }
                 else
+                {
+                    cycles = 4;
                     goto jmp;
+                }
             }
             break;
 
@@ -1871,16 +1941,28 @@ void jp(gb_cpu_t *gb_cpu)
             if ((opcode & 0xF0) == 0xC0)
             {
                 if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+                {
+                    cycles = 4;
                     goto jmp;
-                else 
+                }
+                else
+                {
+                    cycles = 3;
                     goto nojmp;
+                }
             }
             else
             {
                 if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
+                {
+                    cycles = 4;
                     goto jmp;
+                }
                 else
+                {
+                    cycles = 3;
                     goto nojmp;
+                }
             }
             break;
     }
@@ -1896,10 +1978,10 @@ jmp:
     gb_cpu->gb_reg.PC = addr16;
 
 nojmp:
-    return;
+    return cycles;
 }
 
-void call(gb_cpu_t *gb_cpu)
+uint8_t call(gb_cpu_t *gb_cpu)
 {
     /*
         Call: call a procedure defined in code
@@ -1917,7 +1999,7 @@ void call(gb_cpu_t *gb_cpu)
         place of execution, we may call the "procedure" over and over again,
         recycling originally written piece of code.
     */
-    uint8_t opcode;
+    uint8_t opcode, cycles;
     uint16_t data16;
 
     // Fetch opcode from memory
@@ -1938,37 +2020,62 @@ void call(gb_cpu_t *gb_cpu)
         // jump if Zero flag not set
         case 0xC4:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+            {
+                cycles = 3;
                 goto nocall;
+            }
             else
+            {
+                cycles = 6;
                 goto call;
+            }
             break;
 
         // jump if Zero flag set
         case 0xCC:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+            {
+                cycles = 6;
                 goto call;
+            }
             else
+            {
+                cycles = 3;
                 goto nocall;
+            }
             break;
 
         // jump if Carry flag not set
         case 0xD4:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
+            {
+                cycles = 3;
                 goto nocall;
+            }
             else
+            {
+                cycles = 6;
                 goto call;
+            }
             break;
 
         // jump if Carry flag set
         case 0xDC:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
+            {
+                cycles = 6;
                 goto call;
+            }
             else
+            {
+                cycles = 3;
                 goto nocall;
+            }
             break;
 
         // unconditional jump
         case 0xCD:
+            cycles = 6;
             goto call;
             break;
     }
@@ -1985,10 +2092,10 @@ call:
 
 // If condition is false, do not update PC, return directly
 nocall:
-    return;
+    return cycles;
 }
 
-void ret(gb_cpu_t *gb_cpu)
+uint8_t ret(gb_cpu_t *gb_cpu)
 {
     /*
         ret: Return from a procedure.
@@ -1997,7 +2104,7 @@ void ret(gb_cpu_t *gb_cpu)
         and go back to where we came from. The jump back may also be
         conditional/unconditional.
     */
-    uint8_t opcode;
+    uint8_t opcode, cycles;
 
     // Fetch opcode from memory
     opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
@@ -2007,37 +2114,62 @@ void ret(gb_cpu_t *gb_cpu)
         // return if Zero flag not set
         case 0xC0:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+            {
+                cycles = 2;
                 goto noendcall;
+            }
             else
+            {
+                cycles = 5;
                 goto endcall;
-            break;
-
-        // return if Zero flag set
-        case 0xD0:
-            if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
-                goto noendcall;
-            else
-                goto endcall;
+            }
             break;
 
         // return if Carry flag not set
+        case 0xD0:
+            if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
+            {
+                cycles = 2;
+                goto noendcall;
+            }
+            else
+            {
+                cycles = 5;
+                goto endcall;
+            }
+            break;
+
+        // return if Zero flag is set
         case 0xC8:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_ZERO))
+            {
+                cycles = 5;
                 goto endcall;
+            }
             else
+            {
+                cycles = 2;
                 goto noendcall;
+            }
             break;
 
         // return if Carry flag set
         case 0xD8:
             if (gb_cpu->gb_reg.AF.F & (1 << FLAG_CARRY))
+            {
+                cycles = 5;
                 goto endcall;
+            }
             else
+            {
+                cycles = 2;
                 goto noendcall;
+            }
             break;
 
         // unconditional return
         case 0xC9:
+            cycles = 4;
             goto endcall;
             break;
     }
@@ -2048,10 +2180,10 @@ endcall:
                         (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.SP++] << 8);
 // If condition is false, continue execution in procedure
 noendcall:
-    return;
+    return cycles;
 }
 
-void reti(gb_cpu_t *gb_cpu)
+uint8_t reti(gb_cpu_t *gb_cpu)
 {
     /*
         reti: Return and enable interrupts.
@@ -2063,11 +2195,11 @@ void reti(gb_cpu_t *gb_cpu)
     gb_cpu->ime = 1;
     gb_cpu->gb_reg.PC = (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.SP++]) | \
                         (uint16_t)(gb_cpu->gb_mem[gb_cpu->gb_reg.SP++] << 8);
-    return;
+    return 4;
 }
 
 /* Jump vectors */
-void rst(gb_cpu_t *gb_cpu)
+uint8_t rst(gb_cpu_t *gb_cpu)
 {
     /*
         Restart: Sets PC to reserved jump locations.
@@ -2129,12 +2261,12 @@ void rst(gb_cpu_t *gb_cpu)
     gb_cpu->gb_reg.PC = (uint16_t)(0x0000 + offset);
     while (!(gb_cpu->gb_reg.PC == oldPC))
         isa[gb_cpu->gb_mem[gb_cpu->gb_reg.PC]](gb_cpu);
-    return;
+    return 4;
 }
 
 /* Prefix CB instructions */
 
-void rlc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t rlc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         RLC: Rotate left.
@@ -2145,7 +2277,7 @@ void rlc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         just skip comments, especially rotations.
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit7;
+    uint8_t data8, offset, bit7, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x06)
@@ -2153,12 +2285,14 @@ void rlc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = ((cb_opcode & 0x0F) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit7 = (data8 & 0x80) >> 7;
@@ -2171,16 +2305,16 @@ void rlc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit7) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void rrc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t rrc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         RRC: rotate right
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit0;
+    uint8_t data8, offset, bit0, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x0E)
@@ -2188,12 +2322,14 @@ void rrc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) - 8) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit0 = (data8 & 0x01);
@@ -2206,16 +2342,16 @@ void rrc(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit0) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void rl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t rl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         RL: rotate left with carry
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit7;
+    uint8_t data8, offset, bit7, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x16)
@@ -2223,12 +2359,14 @@ void rl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = ((cb_opcode & 0x0F) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit7 = (data8 & 0x80) >> 7;
@@ -2242,16 +2380,16 @@ void rl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit7) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void rr(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t rr(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         RR: rotate right with carry
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit0;
+    uint8_t data8, offset, bit0, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x1E)
@@ -2259,12 +2397,14 @@ void rr(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) - 8) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit0 = (data8 & 0x01);
@@ -2278,16 +2418,16 @@ void rr(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit0) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void sla(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t sla(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         SLA: shift left arithmetic and bit7 saved in carry
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit7;
+    uint8_t data8, offset, bit7, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x26)
@@ -2295,12 +2435,14 @@ void sla(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F)) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit7 = (data8 & 0x80) >> 7;
@@ -2313,17 +2455,17 @@ void sla(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit7) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void sra(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t sra(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         SRA: shift right arithmetic and bit0 saved in carry
         Gaps filled with bit7
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit0, bit7;
+    uint8_t data8, offset, bit0, bit7, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x2E)
@@ -2331,12 +2473,14 @@ void sra(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) - 8) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit0 = (data8 & 0x01);
@@ -2350,16 +2494,16 @@ void sra(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit0) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void swap(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t swap(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         SWAP: swap the lower and higher nibble
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, temp;
+    uint8_t data8, offset, temp, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x36)
@@ -2367,12 +2511,14 @@ void swap(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = ((cb_opcode & 0x0F) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     temp = (data8 & 0x0F);
@@ -2385,17 +2531,17 @@ void swap(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void srl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t srl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         SRL: shift right logical and bit0 saved in carry.
         MSB is put 0.
     */
     uint8_t *reg8ptr;
-    uint8_t data8, offset, bit0;
+    uint8_t data8, offset, bit0, cycles;
     uint16_t data16;
 
     if (cb_opcode == 0x3E)
@@ -2403,12 +2549,14 @@ void srl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) - 8) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     bit0 = (data8 & 0x01);
@@ -2421,17 +2569,17 @@ void srl(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_halfcarry(gb_cpu);
     (bit0) ? set_carry(gb_cpu) : clear_carry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void bit(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t bit(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         BIT: test if bit number is set or not.
         There are a few things to talk about here, I'll go over them
         in the comments below.
     */
-    uint8_t testbit, data8, offset;
+    uint8_t testbit, data8, offset, cycles;
     uint16_t data16;
 
     /*
@@ -2462,11 +2610,13 @@ void bit(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) % 8) + 2) % 9;
         data8 = *((uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset));
+        cycles = 2;
     }
 
     // Set zero flag if selected bit number is 0
@@ -2474,17 +2624,17 @@ void bit(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     clear_addsub(gb_cpu);
     set_halfcarry(gb_cpu);
 
-    return;
+    return cycles;
 }
 
-void res(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t res(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         RES: reset bit number of selected register
         The resolution method is same as BIT so re-using that
     */
     uint8_t *reg8ptr;
-    uint8_t testbit, data8, offset;
+    uint8_t testbit, data8, offset, cycles;
     uint16_t data16;
 
     testbit = (2 * (((cb_opcode & 0xF0) >> 4) - 8)) + \
@@ -2496,12 +2646,14 @@ void res(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) % 8) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     data8 &= ~(1 << testbit);
@@ -2509,16 +2661,16 @@ void res(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     (mem_write(gb_cpu, data16, data8)) : (*reg8ptr = data8);
 
     /* No flag updates */
-    return;
+    return cycles;
 }
 
-void set(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
+uint8_t set(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
 {
     /*
         SET: Set bit on bit number for specific register
     */
     uint8_t *reg8ptr;
-    uint8_t testbit, data8, offset;
+    uint8_t testbit, data8, offset, cycles;
     uint16_t data16;
 
     testbit = (2 * (((cb_opcode & 0xF0) >> 4) - 0x0C)) + \
@@ -2530,12 +2682,14 @@ void set(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
         data16 = (uint16_t)(gb_cpu->gb_reg.HL.H << 8) | \
                  (uint16_t)(gb_cpu->gb_reg.HL.L);
         data8 = mem_read(gb_cpu, data16);
+        cycles = 4;
     }
     else
     {
         offset = (((cb_opcode & 0x0F) % 8) + 2) % 9;
         reg8ptr = (uint8_t *)((unsigned long)(&gb_cpu->gb_reg)+offset);
         data8 = *reg8ptr;
+        cycles = 2;
     }
 
     data8 |= (1 << testbit);
@@ -2543,19 +2697,18 @@ void set(gb_cpu_t *gb_cpu, uint8_t cb_opcode)
     (mem_write(gb_cpu, data16, data8)) : (*reg8ptr = data8);
 
     /* No flag updates */
-    return;
+    return cycles;
 }
 
 /* Call the prefix CB Instructions */
-void pfcb(gb_cpu_t *gb_cpu)
+uint8_t pfcb(gb_cpu_t *gb_cpu)
 {
     uint8_t cb_opcode;
+    uint8_t cycles;
 
     gb_cpu->gb_reg.PC++;
     cb_opcode = gb_cpu->gb_mem[gb_cpu->gb_reg.PC++];
-    prefix_cb[cb_opcode](gb_cpu, cb_opcode);
-
-    return;
+    return (prefix_cb[cb_opcode](gb_cpu, cb_opcode));
 }
 
 void processInterrupts(gb_cpu_t *gb_cpu)
