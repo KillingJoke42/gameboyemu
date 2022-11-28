@@ -10,10 +10,10 @@ CFLAGS+=-DGBEMU_DBG=1
 
 $(shell mkdir -p $(OBJ_DIR))
 
-_HEADERS=gbcpu.h isa.h memorymap.h utils.h
+_HEADERS=gbcpu.h isa.h memorymap.h utils.h timer.h
 HEADERS=$(patsubst %,$(INCLUDE_DIR)/%,$(_HEADERS))
 
-_OBJ=main.o isa.o utils.o memorymap.o utils.o
+_OBJ=main.o isa.o utils.o memorymap.o utils.o timer.o
 OBJ=$(patsubst %,$(OBJ_DIR)/%,$(_OBJ))
 
 $(OBJ_DIR)/%.o: src/%.c $(HEADERS)

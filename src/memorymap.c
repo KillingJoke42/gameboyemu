@@ -16,7 +16,19 @@ void mem_write(gb_cpu_t *gb_cpu, uint16_t addr, uint8_t val)
     if (addr == DIV)
         gb_cpu->gb_mem[DIV] = 0;
 
-    gb_cpu->gb_mem[addr] = val;
+    else if (addr == TAC)
+    {
+        uint8_t orgFreq = GET_CLOCK_FREQ(gb_cpu);
+        gb_cpu->gb_mem[TAC] = val;
+        uint8_t newFreq = GET_CLOCK_FREQ(gb_cpu);
+
+        if (orgFreq != newFreq)
+            SET_CLOCK_FREQ(gb_cpu);
+    }
+
+    else
+        gb_cpu->gb_mem[addr] = val;
+
     return;
 }
 

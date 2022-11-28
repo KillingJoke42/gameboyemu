@@ -12,6 +12,10 @@
 
 #include <stdint.h>
 
+// This is the speed of the gameboy (4194304) / 60 (60 FPS)
+#define GB_CLK_SPEED    4194304
+#define MAXCYCLES       69905
+
 #define set_carry(gb_cpu) \
     (gb_cpu->gb_reg.AF.F |= (1 << FLAG_CARRY))
 
