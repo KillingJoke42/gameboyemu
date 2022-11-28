@@ -4,6 +4,7 @@ SRC_DIR=./src
 OBJ_DIR=./obj
 CC=gcc
 CFLAGS=-I$(INCLUDE_DIR)
+LINKER=-lglut -lGL
 
 CFLAGS+=-DGBEMU_DBG=1
 
