@@ -114,7 +114,7 @@ typedef struct {
     gb_reg_t gb_reg;
     uint8_t *gb_mem;
     uint8_t ime;
-    uint32_t timerCounter;
+    int timerCounter;
     uint32_t dividerCounter;
 } gb_cpu_t;
 

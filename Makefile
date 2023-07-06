@@ -6,7 +6,7 @@ CC=gcc
 CFLAGS=-I$(INCLUDE_DIR)
 LINKER=-lglut -lGL
 
-CFLAGS+=-DGBEMU_DBG=1
+CFLAGS+=-DGBEMU_DBG -DREGDUMP
 
 $(shell mkdir -p $(OBJ_DIR))
 

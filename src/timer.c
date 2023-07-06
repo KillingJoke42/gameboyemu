@@ -1,4 +1,5 @@
 #include <timer.h>
+#include <stdio.h>
 #include <stdint.h>
 
 void UpdateDividerRegister(gb_cpu_t *gb_cpu, uint8_t cycles)
@@ -19,14 +20,16 @@ void UpdateTimers(gb_cpu_t *gb_cpu, uint8_t cycles)
     if (IS_CLOCK_ENABLED(gb_cpu))
     {
         gb_cpu->timerCounter -= cycles;
-
         if (gb_cpu->timerCounter <= 0)
         {
             SET_CLOCK_FREQ(gb_cpu);
 
-            if (mem_read(gb_cpu, TIMA) == 255)
+            if (mem_read(gb_cpu, TIMA) == 0xFF)
             {
                 mem_write(gb_cpu, TIMA, mem_read(gb_cpu, TMA));
+#ifdef GBEMU_DBG
+                printf("TIMER INTERRUPT UPDATE\n");
+#endif
                 mem_write(gb_cpu, GB_INTR_FLAG_REG, (mem_read(gb_cpu, GB_INTR_FLAG_REG) | 0x04));
             }
             else

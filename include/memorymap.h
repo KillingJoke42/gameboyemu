@@ -72,6 +72,30 @@
 #define GB_LCD_CONTROL_START                0xFF40
 #define GB_BOOT_ROM_DISABLE_REG             0xFF50
 
+/*
+    Serial Transfer Registers
+    Two game boys could communicate with each other using Serial communication. These registers
+    will help. One gameboy generates the clock that both gameboys will use to transfer data.
+    Each cycle, a bit is received.
+    
+    SB - Serial Transfer Data. Before a data transfer, the next byte is held in this register.
+    During a data transfer, this register is an amalgamation of outgoing and incoming bits.
+    Each cycle, a bit is shifted from the left over the wire and a bit is shifted in from the
+    reception end.
+    SC - Serial Transfer Control.
+        Bit 7 = Transfer Start Flag (0 = No transfer in progress, 1 = Transfer in progress or requested)
+        Bit 1 = Clock Speed (0 = Normal, 1 = Fast (CGB))
+        Bit 0 = Shift Clock (0 = External, 1 = Internal)
+
+    When two gameboys want to communicate, TX GB writes 0x81 to SC and the byte to be sent to SB.
+    Once the transfer is complete, bit 7 of SC is cleared and Serial Interrupt Handler is called.
+    The slave gameboy "might" set the bit 7 of its SC and will clear it at the end of the transfer
+    if it "bothered" to set the bit in the first place. No I don't know what "might" means here.
+    Further reasearch is definitely required.
+*/
+#define GB_SERIAL_TRANSFER_DATA             0xFF01
+#define GB_SERIAL_TRANSFER_CONTROL          0xFF02
+
 #define POWERUP_STACK_ADDR_CNT              31
 
 static uint16_t powerup_stack_addrs[POWERUP_STACK_ADDR_CNT] = \

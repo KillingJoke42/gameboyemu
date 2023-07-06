@@ -13,6 +13,10 @@
 */
 void mem_write(gb_cpu_t *gb_cpu, uint16_t addr, uint8_t val)
 {
+#ifdef GBEMU_DBG
+    if (addr == 0xFF0F)
+        printf("Value written to GB_INTR_FLAG_REG: %d\n", val);
+#endif
     if (addr == DIV)
         gb_cpu->gb_mem[DIV] = 0;
 
@@ -25,7 +29,10 @@ void mem_write(gb_cpu_t *gb_cpu, uint16_t addr, uint8_t val)
         if (orgFreq != newFreq)
             SET_CLOCK_FREQ(gb_cpu);
     }
-
+#if defined(GBEMU_DBG) && defined(SERIAL)
+    else if (addr == GB_SERIAL_TRANSFER_CONTROL)
+        printf("%c", mem_read(gb_cpu, GB_SERIAL_TRANSFER_DATA));
+#endif
     else
         gb_cpu->gb_mem[addr] = val;
 

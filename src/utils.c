@@ -89,6 +89,7 @@ void load_gb_rom(gb_cpu_t *gb_cpu, game_file_t *game_file)
     return;
 }
 
+#ifdef GBEMU_DBG
 void register_dump(gb_cpu_t *gb_cpu)
 {
     uint16_t af, bc, de, hl;
@@ -111,3 +112,4 @@ void register_dump(gb_cpu_t *gb_cpu)
                     gb_cpu->gb_mem[gb_cpu->gb_reg.PC+2], gb_cpu->gb_mem[gb_cpu->gb_reg.PC+3]));
     return;
 }
+#endif
